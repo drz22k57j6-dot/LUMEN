@@ -381,3 +381,5 @@ export function planModele(nom: keyof typeof GABARITS, hauteurSousPlafond = 2.7)
   }
   return plan;
 }
+
+export * from './modele';

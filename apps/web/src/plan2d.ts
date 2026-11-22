@@ -20,7 +20,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 const stocker = (cle: string, v: unknown) => { try { localStorage.setItem(cle, JSON.stringify(v)); } catch { /* stockage indisponible */ } };
 const relire = <T>(cle: string): T | null => { try { const s = localStorage.getItem(cle); return s ? (JSON.parse(s) as T) : null; } catch { return null; } };
 
-export function initPlan2D() {
+export function initPlan2D(opts: { voir3D?: (plan: Plan) => void } = {}) {
   // --- Éditeur 2D ----------------------------------------------------------
   const ed = el('div', { id: 'editeur', hidden: '' });
   ed.innerHTML = `
@@ -52,6 +52,7 @@ export function initPlan2D() {
       <div class="ligne">
         <label>Sous plafond <input id="edHsp" type="number" min="2.2" max="4.5" step="0.05" value="2.7" /> m</label>
         <button id="edEnregistrer" type="button">✓ Enregistrer le plan</button>
+        <button id="edVoir3D" type="button">🧊 Voir en 3D</button>
       </div>
     </div>`;
   document.body.append(ed);
@@ -170,6 +171,7 @@ export function initPlan2D() {
       (plan.ouvertures.length && azBas === undefined ? `<div class="err">Indique vers où regardent les fenêtres du bas.</div>` : '') +
       (err.length ? `<div class="err">${err.join('<br>')}</div>` : '');
     q<HTMLButtonElement>('#edEnregistrer').disabled = err.length > 0 || plan.pieces.length === 0;
+    q<HTMLButtonElement>('#edVoir3D').disabled = err.length > 0 || plan.pieces.length === 0;
   }
 
   const pointeur = (e: PointerEvent) => { const r = cv.getBoundingClientRect(); return versPlan(e.clientX - r.left, e.clientY - r.top); };
@@ -341,6 +343,12 @@ export function initPlan2D() {
   };
   q<HTMLButtonElement>('#edAnnuler').onclick = () => { const s = historique.pop(); if (s) plan = JSON.parse(s) as Plan; dessiner(); };
   q<HTMLButtonElement>('#edFermer').onclick = () => { ed.hidden = true; stocker(cle, plan); };
+  q<HTMLButtonElement>('#edVoir3D').onclick = () => {
+    if (!opts.voir3D || erreursPlan(plan).length || !plan.pieces.length) return;
+    stocker(cle, plan);
+    ed.hidden = true;
+    opts.voir3D(plan);
+  };
   q<HTMLButtonElement>('#edEnregistrer').onclick = () => {
     stocker(cle, plan);
     message = 'Plan enregistré. Étape 2 (bientôt) : le placer en 3D dans le vrai bâtiment.';
