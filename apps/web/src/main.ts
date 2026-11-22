@@ -35,8 +35,8 @@ const scene = new THREE.Scene();
 // Éclairage d'ambiance réaliste (reflets du zinc, des vitres et de la pierre).
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.45;
-scene.fog = new THREE.Fog(0x9cc4ef, 500, 1400);
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 6000);
+scene.fog = new THREE.Fog(0x9cc4ef, 1200, 4800);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 9000);
 camera.position.set(260, 320, 380);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -61,6 +61,7 @@ scene.add(fondSol);
 
 // Matériau du relief : orthophoto sur les surfaces horizontales, couleur de classe sur les murs.
 const uniformes = { uPhoto: { value: 1 } };
+function creerMatRelief() {
 const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.3 });
 matRelief.onBeforeCompile = (s) => {
   s.uniforms.uPhoto = uniformes.uPhoto;
@@ -76,6 +77,11 @@ matRelief.onBeforeCompile = (s) => {
        diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));`,
     );
 };
+return matRelief;
+}
+const matRelief = creerMatRelief();
+const matLoin = creerMatRelief();
+
 let relief: THREE.Mesh | null = null;
 let facades: THREE.Mesh | null = null;
 
@@ -221,7 +227,7 @@ function majSoleil() {
   const d = dateCourante();
   const s = positionSoleil(d, lieu());
   const [x, y, z] = directionSoleil(s);
-  const c = vueFenetre ? new THREE.Vector3() : controls.target;
+  const c = vueFenetre || vueRue ? camera.position : controls.target;
   soleil.position.set(c.x + x * 900, c.y + y * 900, c.z + z * 900);
   soleil.target.position.copy(c);
   soleil.target.updateMatrixWorld();
@@ -234,6 +240,9 @@ function majSoleil() {
   scene.fog!.color.copy(ciel);
   disque.position.set(x * 420, y * 420, z * 420);
   disque.visible = s.elevation > -1 && !vueFenetre;
+  const centreCiel = vueRue ? camera.position : new THREE.Vector3();
+  disque.position.add(centreCiel);
+  trajet.position.copy(centreCiel);
   $('heureTxt').textContent = hhmm(d);
   $('soleilTxt').textContent = s.elevation > 0 ? `soleil à ${s.elevation.toFixed(0)}° · ${cardinal(s.azimut)}` : 'nuit';
 }
@@ -318,13 +327,13 @@ async function charger(a: Adresse) {
     chargement(null);
     return alerte((e as Error).message);
   }
-  envoyer({ type: 'charger', centre: a.l93, rayon: RAYON, rayonDetail: 150, emprises: batiments.map((b) => b.contour) });
+  envoyer({ type: 'charger', centre: a.l93, rayon: RAYON, rayonDetail: 150, rayonLoin: 2000, emprises: batiments.map((b) => b.contour) });
 }
 
 type Grille2 = { n: number; bbox: Terrain['bbox']; hauteurs: Float32Array; classes: Uint8Array };
 
 /** Maillage d'une grille d'altitudes (sommets aux centres des cellules), UV sur l'orthophoto globale. */
-function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y: number) => boolean) {
+function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y: number) => boolean, mat = matRelief) {
   const { n, bbox, hauteurs, classes } = g;
   const taille = bbox[2] - bbox[0], tO = bboxOrtho[2] - bboxOrtho[0];
   const geo = new THREE.PlaneGeometry(taille - taille / n, taille - taille / n, n - 1, n - 1);
@@ -345,8 +354,9 @@ function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y:
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
   geo.computeBoundsTree();
-  const m = new THREE.Mesh(geo, matRelief);
-  m.castShadow = m.receiveShadow = true;
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = mat === matRelief;
+  m.receiveShadow = true;
   return m;
 }
 
@@ -398,14 +408,53 @@ function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
     pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.fill();
   }
+  // Bande de 1,2 m derrière chaque façade : ramenée au sol, pour que le LiDAR ne masque pas la façade générée.
+  ctx.fillStyle = 'rgb(1,0,0)';
+  for (const t of taches) {
+    const [ax, az] = t.a, [bx, bz] = t.b;
+    const W = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / W, dz = (bz - az) / W;
+    const ix = dz * 1.2, iz = -dx * 1.2, ox = -dz * 0.6, oz = dx * 0.6;
+    ctx.beginPath();
+    const pts = [px(ax + ox, az + oz), px(bx + ox, bz + oz), px(bx + ix, bz + iz), px(ax + ix, az + iz)];
+    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.fill();
+  }
   const d = ctx.getImageData(0, 0, n, n).data;
   for (let i = 0; i < n * n; i++) {
     const v = d[i * 4]!;
-    if (v && g.classes[i] === 1) g.hauteurs[i] = Math.min(g.hauteurs[i]!, base0 + v - 0.4);
+    if (v === 1) {
+      const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
+      g.hauteurs[i] = solA({ x, y });
+      g.classes[i] = 0;
+    } else if (v && g.classes[i] === 1) g.hauteurs[i] = Math.min(g.hauteurs[i]!, base0 + v - 0.4);
   }
 }
 
 let detail: THREE.Mesh | null = null;
+let loin: THREE.Mesh | null = null;
+
+/** Zone lointaine (2 km) : LiDAR à 8 m + orthophoto, creusée sous la zone à 1 m. */
+function construireLoin(m: Grille2) {
+  if (!terrain || !adresse) return;
+  if (loin) (loin.geometry.dispose(), scene.remove(loin));
+  const z = terrain.bbox;
+  loin = maillage(m, m.bbox, (x, y) => x > z[0] + 8 && x < z[2] - 8 && y > z[1] + 8 && y < z[3] - 8, matLoin);
+  scene.add(loin);
+  fetch(urlWms(COUCHES.ortho, m.bbox, 2048, 2048, 'image/jpeg'))
+    .then((r) => r.blob())
+    .then((b) => createImageBitmap(b))
+    .then((img) => {
+      const t = new THREE.Texture(img);
+      t.flipY = false;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      t.needsUpdate = true;
+      matLoin.map?.dispose();
+      matLoin.map = t;
+      matLoin.needsUpdate = true;
+    })
+    .catch(() => {});
+}
 const habillage = new Habillage(import.meta.env.BASE_URL + 'tex/');
 scene.add(habillage.groupe);
 
@@ -486,8 +535,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
     .finally(() => (indic.textContent = 'Photo'));
   chargement(null);
 
-  controls.target.set(0, 10, 0);
-  camera.position.set(170, 230, 260);
+  $('vueRue').hidden = false;
+  entrerRue();
   majTrajet();
   majSoleil();
   $('accueil').hidden = true;
@@ -616,8 +665,81 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (!relief || vueFenetre || Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > 8 || performance.now() - depart.t > 500) return;
   ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
   const hit = ray.intersectObjects([detail, relief, habillage.groupe].filter(Boolean) as THREE.Object3D[], true)[0];
-  if (hit) choisir(versL93(hit.point));
+  if (!hit) return;
+  const p = versL93(hit.point);
+  const sol = hit.point.y + alt0 - solA(p) < 0.6 && (hit.face?.normal.y ?? 0) > 0.6;
+  if (vueRue && sol) {
+    // Marcher jusqu'au point touché (en gardant la direction du regard).
+    const dir = new THREE.Vector3().subVectors(controls.target, camera.position);
+    placerPieton(p, { x: dir.x, y: -dir.z });
+  } else choisir(p);
 });
+
+// ---------------------------------------------------------------------------
+// Vue piéton (dans la rue, à 2 m du sol)
+// ---------------------------------------------------------------------------
+let vueRue = false;
+function regles(pieton: boolean) {
+  camera.fov = pieton ? 70 : 45;
+  controls.minDistance = pieton ? 0.01 : 20;
+  controls.maxPolarAngle = pieton ? Math.PI : Math.PI * 0.47;
+  controls.enablePan = controls.enableZoom = !pieton;
+  controls.rotateSpeed = pieton ? -0.35 : 1;
+  camera.updateProjectionMatrix();
+}
+/** Place le piéton en p (L93), regard horizontal vers la direction donnée. */
+function placerPieton(p: XY, regard: XY) {
+  const c = local(p, solA(p) + 2);
+  const l = Math.hypot(regard.x, regard.y) || 1;
+  camera.position.copy(c);
+  controls.target.copy(c.clone().add(new THREE.Vector3(regard.x / l, 0.18, -regard.y / l).multiplyScalar(0.5)));
+  controls.update();
+  majSoleil();
+}
+/** Point de rue le plus proche de l'adresse (sol dégagé, hors bâtiment). */
+function pointDeRue(a: XY): XY {
+  for (let r = 0; r <= 60; r += 1)
+    for (let k = 0; k < (r ? 24 : 1); k++) {
+      const an = (k / 24) * Math.PI * 2;
+      const q2 = { x: a.x + Math.cos(an) * r, y: a.y + Math.sin(an) * r };
+      if (surfA(q2) - solA(q2) < 0.8 && !batiments.some((b) => contient(b.contour, q2))) return q2;
+    }
+  return a;
+}
+function entrerRue() {
+  if (!adresse) return;
+  if (vueFenetre) basculerVue();
+  vueRue = true;
+  regles(true);
+  // Point de rue devant l'adresse, puis on recule vers le milieu de la rue (max 7 m) pour voir la façade.
+  const a = adresse.l93;
+  const q0 = pointDeRue(a);
+  let u = { x: q0.x - a.x, y: q0.y - a.y };
+  const lu = Math.hypot(u.x, u.y);
+  if (lu < 0.1) u = { x: 0, y: -1 };
+  else u = { x: u.x / lu, y: u.y / lu };
+  let t = 0;
+  while (t < 30) {
+    const q2 = { x: q0.x + u.x * (t + 0.5), y: q0.y + u.y * (t + 0.5) };
+    if (surfA(q2) - solA(q2) > 2) break;
+    t += 0.5;
+  }
+  const p = { x: q0.x + u.x * Math.min(t / 2, 7), y: q0.y + u.y * Math.min(t / 2, 7) };
+  // Regard vers l'immeuble, légèrement de biais pour voir la rue en perspective.
+  const an = 1.0, rx = -u.x, ry = -u.y;
+  placerPieton(p, { x: rx * Math.cos(an) - ry * Math.sin(an), y: rx * Math.sin(an) + ry * Math.cos(an) });
+  $('vueRue').textContent = '🛩 Vue aérienne';
+  majSoleil();
+}
+function sortirRue() {
+  vueRue = false;
+  regles(false);
+  $('vueRue').hidden = false;
+  entrerRue();
+  $('vueRue').textContent = '🚶 Vue rue';
+  majSoleil();
+}
+$('vueRue').onclick = () => (vueRue ? sortirRue() : entrerRue());
 
 // ---------------------------------------------------------------------------
 // Vue depuis la fenêtre
@@ -638,22 +760,13 @@ function basculerVue() {
   if (vueFenetre) {
     memo.pos.copy(camera.position);
     memo.cible.copy(controls.target);
-    camera.fov = 70;
-    controls.minDistance = 0.01;
-    controls.maxPolarAngle = Math.PI;
-    controls.enablePan = controls.enableZoom = false;
-    controls.rotateSpeed = -0.35;
+    regles(true);
     placerCameraFenetre();
   } else {
-    camera.fov = 45;
-    controls.minDistance = 20;
-    controls.maxPolarAngle = Math.PI * 0.47;
-    controls.enablePan = controls.enableZoom = true;
-    controls.rotateSpeed = 1;
+    regles(vueRue);
     camera.position.copy(memo.pos);
     controls.target.copy(memo.cible);
   }
-  camera.updateProjectionMatrix();
   majSoleil();
 }
 $('vueFenetre').onclick = basculerVue;

@@ -5,7 +5,7 @@ import { construireVoirie, COUCHES, urlWms, type Troncon } from '@lumen/urban';
 import type { Batiment } from '@lumen/core';
 
 export type Requete =
-  | { type: 'charger'; centre: XY; rayon: number; rayonDetail: number; emprises: XY[][] }
+  | { type: 'charger'; centre: XY; rayon: number; rayonDetail: number; rayonLoin: number; emprises: XY[][] }
   | { type: 'voirie'; troncons: Troncon[]; batiments: Batiment[]; emprise: [number, number, number, number] }
   | { type: 'calculer'; lieu: LonLat; points: { x: number; y: number; z: number }[]; azimut: number; annee: number };
 
@@ -120,6 +120,18 @@ async function charger(q: Extract<Requete, { type: 'charger' }>) {
     { type: 'pret', n, res: 1, bbox, hauteurs, classes, mnt: zT.slice(), nT, couverture: 1 - trous / (nS * nS), detail: { n: nD, bbox: bboxD, hauteurs: hD, classes: cD } },
     [hauteurs.buffer, classes.buffer, hD.buffer, cD.buffer],
   );
+
+  // Zone lointaine : LiDAR à 8 m sur 2 km de rayon (silhouette de la ville, collines).
+  const RL = q.rayonLoin, nL = Math.round((2 * RL) / 8);
+  const bboxL: [number, number, number, number] = [q.centre.x - RL, q.centre.y - RL, q.centre.x + RL, q.centre.y + RL];
+  const [zL, tL] = await Promise.all([raster(COUCHES.mns, bboxL, nL), raster(COUCHES.mnt, bboxL, nL)]);
+  const cL = new Uint8Array(nL * nL);
+  for (let i = 0; i < zL.length; i++) {
+    if (Number.isNaN(tL[i]!)) tL[i] = 0;
+    if (Number.isNaN(zL[i]!)) zL[i] = tL[i]!;
+    cL[i] = zL[i]! - tL[i]! > 3 ? 1 : 0;
+  }
+  post({ type: 'loin', n: nL, bbox: bboxL, hauteurs: zL, classes: cL }, [zL.buffer, cL.buffer]);
 }
 
 function calculer(q: Extract<Requete, { type: 'calculer' }>) {
