@@ -27,6 +27,8 @@ export interface Batiment {
   contour: XY[];
   hauteur: Donnee<number>;
   altitudeSol: Donnee<number>;
+  /** Altitude de la gouttière (bas du toit), si connue. */
+  altitudeToit?: Donnee<number>;
   nature?: string;
   usage?: string;
   nbLogements?: number;

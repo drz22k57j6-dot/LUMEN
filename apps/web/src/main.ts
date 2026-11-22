@@ -6,6 +6,7 @@ import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type 
 import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie } from './voirie3d';
+import { creerHabillage, rentrer, type Habillage } from './habillage';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
@@ -72,6 +73,7 @@ matRelief.onBeforeCompile = (s) => {
 };
 let relief: THREE.Mesh | null = null;
 let facades: THREE.Mesh | null = null;
+let habillage: Habillage | null = null;
 
 // Façades : murs verticaux BD TOPO avec fenêtres procédurales (étages de 3 m), teinte variée par immeuble.
 const matFacade = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0 });
@@ -341,15 +343,26 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
   scene.add(relief);
   fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
 
-  // Murs des immeubles
+  // Façades parisiennes en vrai relief (moteur de façades) sur les immeubles proches.
+  if (habillage) (habillage.liberer(), scene.remove(habillage.groupe));
+  habillage = creerHabillage({
+    batiments, centre: adresse!.l93, rayon: mobile ? 110 : 170, rayonDetail: mobile ? 45 : 70,
+    sol: solB, vers3: (p, z) => local(p, z), ombres: true,
+  });
+  scene.add(habillage.groupe);
+
+  // Murs des immeubles (volume IGN ; rentré de 0,6 m et arrêté sous le toit là où il y a des façades)
   const geos: THREE.BufferGeometry[] = [];
   const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   for (const b of batiments) {
     if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5) continue;
     const cx = b.contour.reduce((s, p) => s + p.x, 0) / b.contour.length, cy = b.contour.reduce((s, p) => s + p.y, 0) / b.contour.length;
     const base = solA({ x: cx, y: cy });
-    const forme = new THREE.Shape(b.contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
-    const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, b.altitudeSol.valeur + b.hauteur.valeur - base - 0.6), bevelEnabled: false });
+    const habille = habillage.habilles.has(b.id);
+    const contour = habille ? rentrer(b.contour, 0.6) : b.contour;
+    const haut = habille ? (b.altitudeToit?.valeur ?? b.altitudeSol.valeur + b.hauteur.valeur * 0.85) - 0.3 : b.altitudeSol.valeur + b.hauteur.valeur - 0.6;
+    const forme = new THREE.Shape(contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
+    const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, haut - base), bevelEnabled: false });
     // v des murs = hauteur depuis le sol (m)
     const uvA = g.attributes.uv as THREE.BufferAttribute, posA = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < uvA.count; i++) uvA.setY(i, posA.getZ(i));
@@ -695,6 +708,7 @@ renderer.setAnimationLoop((t) => {
     heure.value = String((+heure.value + dt * 90) % 1440);
     majSoleil();
   }
+  habillage?.tache(mobile ? 6 : 10);
   controls.update();
   renderer.render(scene, camera);
 });

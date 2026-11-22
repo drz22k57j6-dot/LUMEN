@@ -120,18 +120,68 @@ const CORPS: Record<string, string> = {
     rough = 0.95;`,
 };
 
+// ---------------------------------------------------------------------------
+// Photos de matières (Poly Haven, CC0, reprises de limoges-3d) mélangées aux détails procéduraux :
+// la photo donne la vraie matière, le procédural garde l'usure, les reprises, l'huile, les joints.
+// Échantillonnage « sans répétition visible » (technique d'Inigo Quilez).
+// ---------------------------------------------------------------------------
+const PHOTOS: Record<string, { tex: string; echelle: number; base: number; teinte?: number }> = {
+  chaussee: { tex: 'chaussee', echelle: 3.0, base: 0.107, teinte: 0.55 }, // enrobé parisien : plus sombre que la photo
+  trottoir: { tex: 'trottoir', echelle: 2.5, base: 0.142, teinte: 0.85 },
+  bordure: { tex: 'bordure', echelle: 1.2, base: 0.45 },
+  caniveau: { tex: 'pave', echelle: 1.2, base: 0.29 },
+};
+const cachePhotos = new Map<string, THREE.Texture>();
+function photo(nom: string, srgb: boolean): THREE.Texture {
+  let t = cachePhotos.get(nom);
+  if (!t) {
+    t = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}tex/voirie/${nom}.webp`);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    cachePhotos.set(nom, t);
+  }
+  return t;
+}
+const GLSL_PHOTO = `
+uniform sampler2D uPhotoC, uPhotoR; uniform float uEchelle, uBase, uTeinte;
+float pvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+vec4 ntex(sampler2D t, vec2 x){ float k=pvn(x*1.1); vec2 dx=dFdx(x), dy=dFdy(x); float l=k*8., f=fract(l), ia=floor(l), ib=ia+1.;
+  vec2 oa=sin(vec2(3.,7.)*ia), ob=sin(vec2(3.,7.)*ib); vec4 a=textureGrad(t,x+oa,dx,dy), b=textureGrad(t,x+ob,dx,dy);
+  return mix(a,b,smoothstep(.2,.8,f-.1*dot(a.rgb-b.rgb,vec3(1)))); }
+`;
+
 function materiau(nom: string, bruit: THREE.Texture, decalage: number): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: nom === 'fonte' ? 0.45 : 0 });
   m.name = `voirie_${nom}`;
   if (decalage) Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -decalage, polygonOffsetUnits: -decalage * 2 });
+  const ph = PHOTOS[nom];
   m.onBeforeCompile = (s) => {
     s.uniforms.uBruit = { value: bruit };
+    if (ph) {
+      s.uniforms.uPhotoC = { value: photo(`${ph.tex}_c`, true) };
+      s.uniforms.uPhotoR = { value: photo(`${ph.tex}_r`, false) };
+      s.uniforms.uEchelle = { value: ph.echelle };
+      s.uniforms.uBase = { value: ph.base };
+      s.uniforms.uTeinte = { value: ph.teinte ?? 1 };
+    }
     s.vertexShader =
       'attribute vec2 aSt;\nvarying vec3 vWp; varying vec2 vSt;\n' +
       s.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz; vSt = aSt;');
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + GLSL_COMMUN)
-      .replace('#include <map_fragment>', `vec3 col; float rough;\n{${CORPS[nom]}}\ndiffuseColor.rgb *= col;`)
+      .replace('#include <common>', '#include <common>\n' + GLSL_COMMUN + (ph ? GLSL_PHOTO : ''))
+      .replace(
+        '#include <map_fragment>',
+        `vec3 col; float rough;\n{${CORPS[nom]}}\n` +
+          (ph
+            ? `{ vec3 wn = normalize(cross(dFdx(vWp), dFdy(vWp))); vec2 up = (abs(wn.y) > 0.5 ? vWp.xz : vec2(vWp.x + vWp.z, vWp.y)) / uEchelle;
+                 vec3 tc = ntex(uPhotoC, up).rgb; float tr = ntex(uPhotoR, up).r;
+                 float l = dot(col, vec3(0.3333)) / uBase;           // détails procéduraux (usure, huile, joints) relatifs
+                 col = tc * uTeinte * clamp(0.55 + 0.45 * l, 0.25, 1.6);
+                 rough = mix(rough, tr, 0.55); }\n`
+            : '') +
+          'diffuseColor.rgb *= col;',
+      )
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = rough;');
   };
   m.customProgramCacheKey = () => m.name;

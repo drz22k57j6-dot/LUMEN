@@ -53,6 +53,7 @@ export function versBatiment(e: EntiteBdTopo): Batiment | null {
       ? donnee(p.altitude_minimale_sol, 'mesure', 'IGN BD TOPO', prec)
       : donnee(0, 'genere', 'Lumen (altitude inconnue)');
   const b: Batiment = { id: e.id, contour, hauteur, altitudeSol: sol };
+  if (p.altitude_minimale_toit != null) b.altitudeToit = donnee(p.altitude_minimale_toit, 'mesure', 'IGN BD TOPO', prec);
   if (p.nature) b.nature = p.nature;
   if (p.usage_1) b.usage = p.usage_1;
   if (p.nombre_de_logements != null) b.nbLogements = p.nombre_de_logements;
