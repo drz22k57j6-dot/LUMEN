@@ -48,6 +48,7 @@ export function initPlan2D(opts: { voir3D?: (plan: Plan) => void } = {}) {
     </div>
     <canvas id="edCanvas"></canvas>
     <div class="pied-ed">
+      <div id="edEchelle" class="ligne" hidden>Longueur réelle entre les 2 points : <input type="number" inputmode="decimal" min="0.1" step="0.01" placeholder="m" /> m <button type="button">OK</button></div>
       <div id="edAide"></div>
       <div class="ligne">
         <label>Sous plafond <input id="edHsp" type="number" min="2.2" max="4.5" step="0.05" value="2.7" /> m</label>
@@ -212,17 +213,29 @@ export function initPlan2D(opts: { voir3D?: (plan: Plan) => void } = {}) {
     mesure.push([x, y]);
     if (mesure.length < 2 || !fond) return;
     const [[x1, y1], [x2, y2]] = mesure as [[number, number], [number, number]];
-    mesure = [];
     const d = Math.hypot(x2 - x1, y2 - y1);
-    const reel = parseFloat((prompt('Longueur réelle entre ces deux points (en mètres) ?', '') ?? '').replace(',', '.'));
-    if (!(reel > 0) || d < 1e-6) return void (message = 'Échelle annulée.');
-    const k = reel / d;
-    fond.mpp *= k;
-    fond.x = x1 + (fond.x - x1) * k;
-    fond.y = fond.img.height * fond.mpp; // bas de l'image posé sur la ligne de façade
-    message = `Échelle réglée : ${reel} m. Trace maintenant les pièces par-dessus.`;
-    stockerFond();
-    ajusterFond();
+    // Saisie intégrée (les fenêtres prompt() sont bloquées sur certains hébergements).
+    const boite = q<HTMLDivElement>('#edEchelle');
+    const champ = boite.querySelector('input')!;
+    boite.hidden = false;
+    champ.value = '';
+    champ.focus();
+    const valider = () => {
+      boite.hidden = true;
+      mesure = [];
+      const reel = parseFloat(champ.value.replace(',', '.'));
+      if (!fond || !(reel > 0) || d < 1e-6) { message = 'Échelle annulée.'; return dessiner(); }
+      const k = reel / d;
+      fond.mpp *= k;
+      fond.x = x1 + (fond.x - x1) * k;
+      fond.y = fond.img.height * fond.mpp; // bas de l'image posé sur la ligne de façade
+      message = `Échelle réglée : ${reel} m. Trace maintenant les pièces par-dessus.`;
+      stockerFond();
+      ajusterFond();
+      dessiner();
+    };
+    boite.querySelector<HTMLButtonElement>('button')!.onclick = valider;
+    champ.onkeydown = (e) => { if (e.key === 'Enter') valider(); };
   }
   const stockerFond = () => stocker('lumen:plan:fond', fond && { src: fond.src, x: fond.x, y: fond.y, mpp: fond.mpp });
   const ajusterFond = () => {
