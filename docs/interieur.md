@@ -20,3 +20,11 @@
 - Plan et image importée stockés dans le navigateur (localStorage) ; à migrer vers Supabase.
 - Import PDF : pas encore (faire une capture d'écran du plan).
 - Import RoomPlan/USDZ, rapport PDF, cas de validation terrain : à faire.
+
+## Studio 3D (générateur d'appartement 3D multi-sources)
+Bouton « Studio 3D » sur l'accueil, ou « Voir en 3D » depuis le plan 2D.
+- **Sources** : plan 2D Lumen · image de plan (via l'éditeur 2D) · scan Apple RoomPlan (`CapturedRoom` en JSON : murs, portes, fenêtres, baies, sols, meubles, pièces) · scan 3D photo GLB/glTF/OBJ (USDZ texte seulement) affiché tel quel · plan d'architecte DXF (LINE/LWPOLYLINE, calques « mur/wall/cloison », unités $INSUNITS).
+- **Modèle commun** (`packages/interior/src/modele.ts`) : murs à n'importe quel angle, ouvertures rattachées à un mur, pièces polygonales, meubles ; provenance par élément (scan = `mesure`).
+- **Plan 2D éditable en profondeur** : choisir, déplacer les extrémités des murs (aimant 5 cm + coins), dessiner des murs (aimant orthogonal), poser/glisser fenêtres, portes-fenêtres, portes ; longueur, épaisseur, hauteur, intérieur/extérieur, couper, supprimer ; dimensions et allège des ouvertures ; type et nom des pièces ; pincer pour zoomer ; annuler.
+- **Rendu** : parquet / carrelage / enduit procéduraux, plinthes, menuiseries, portes entrouvertes, vitrage, ciel physique, soleil réel (éphémérides) selon l'orientation, ombres douces, occlusion ambiante (GTAO, « Qualité Ultra »), maquette à murs coupés, visite à hauteur d'yeux (joystick sur iPhone, ZQSD sur ordinateur).
+- **Limites** : USDZ binaire non lu (exporter en GLB) ; DXF sans fenêtres (à poser dans l'éditeur) ; pièces DXF seulement si calque « pièce/room » ; lieu du soleil = Paris tant que le logement n'est pas placé à son adresse (étape suivante).

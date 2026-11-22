@@ -7,6 +7,7 @@ import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
 import { batimentsAutour, contient, COUCHES, geocoder, urlWms } from '@lumen/urban';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
+import { initStudio } from './studio3d';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -658,6 +659,7 @@ feuille.addEventListener('pointerdown', () => feuille.classList.remove('reduite'
 // ---------------------------------------------------------------------------
 let avant = performance.now();
 renderer.setAnimationLoop((t) => {
+  if (document.body.classList.contains('studio')) return; // le Studio 3D a son propre rendu
   const dt = Math.min(0.1, (t - avant) / 1000);
   avant = t;
   if (lecture) {
@@ -674,5 +676,9 @@ majSoleil();
 (window as unknown as { __lumen: unknown }).__lumen = { facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
-const plan2d = initPlan2D();
+// Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
+let studio: ReturnType<typeof initStudio> | null = null;
+const plan2d = initPlan2D({ voir3D: (p) => studio?.depuisPlan2D(p) });
+studio = initStudio({ ouvrirPlan2D: () => plan2d.ouvrir() });
 $('monPlan').onclick = plan2d.ouvrir;
+$('studio3d').onclick = () => studio?.ouvrir();
