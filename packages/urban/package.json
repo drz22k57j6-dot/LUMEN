@@ -1,1 +1,1 @@
-{ "name": "@lumen/urban", "version": "0.1.0", "type": "module", "main": "src/index.ts", "dependencies": { "@lumen/core": "workspace:*" } }
+{"name":"@lumen/urban","version":"0.1.0","type":"module","main":"src/index.ts","dependencies":{"@lumen/core":"workspace:*","clipper-lib":"6.4.2"}}

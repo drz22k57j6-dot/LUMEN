@@ -1,10 +1,12 @@
 import { fromArrayBuffer } from 'geotiff';
 import { debutJourParis, type LonLat, type XY } from '@lumen/core';
 import { ensoleillementAnnee, type Grille } from '@lumen/analysis';
-import { COUCHES, urlWms } from '@lumen/urban';
+import { construireVoirie, COUCHES, urlWms, type Troncon } from '@lumen/urban';
+import type { Batiment } from '@lumen/core';
 
 export type Requete =
   | { type: 'charger'; centre: XY; rayon: number; emprises: XY[][] }
+  | { type: 'voirie'; troncons: Troncon[]; batiments: Batiment[]; emprise: [number, number, number, number] }
   | { type: 'calculer'; lieu: LonLat; points: { x: number; y: number; z: number }[]; azimut: number; annee: number };
 
 let mns: Grille | null = null;
@@ -125,6 +127,7 @@ function calculer(q: Extract<Requete, { type: 'calculer' }>) {
 self.onmessage = async (e: MessageEvent<Requete>) => {
   try {
     if (e.data.type === 'charger') await charger(e.data);
+    else if (e.data.type === 'voirie') post({ type: 'voirie', v: construireVoirie(e.data.troncons, e.data.batiments, { emprise: e.data.emprise }) });
     else calculer(e.data);
   } catch (err) {
     post({ type: 'erreur', texte: (err as Error).message });

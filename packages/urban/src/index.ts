@@ -109,3 +109,4 @@ export function urlWms(couche: string, bbox: [number, number, number, number], w
     `&CRS=EPSG:2154&BBOX=${bbox.join(',')}&WIDTH=${w}&HEIGHT=${h}&FORMAT=${encodeURIComponent(format)}`
   );
 }
+export * from './voirie';

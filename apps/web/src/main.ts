@@ -4,7 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh';
 import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type XY } from '@lumen/core';
 import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
-import { batimentsAutour, contient, COUCHES, geocoder, urlWms } from '@lumen/urban';
+import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
+import { creerVoirie3D, libererVoirie } from './voirie3d';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
@@ -119,6 +120,8 @@ interface Terrain { bbox: [number, number, number, number]; n: number; mnt: Floa
 let adresse: Adresse | null = null;
 let alt0 = 0;
 let batiments: Batiment[] = [];
+let troncons: Troncon[] = [];
+let voirie: THREE.Group | null = null;
 let terrain: Terrain | null = null;
 let selBat: Batiment | null = null;
 let facade: { a: XY; b: XY; normale: XY; azimut: number; point: XY } | null = null;
@@ -134,6 +137,25 @@ function solA(p: XY): number {
   const c = Math.floor((p.x - bbox[0]) / 2), r = Math.floor((bbox[3] - p.y) / 2);
   const z = mnt[Math.max(0, Math.min(nT - 1, r)) * nT + Math.max(0, Math.min(nT - 1, c))];
   return z !== undefined && Number.isFinite(z) ? z : alt0;
+}
+
+/** Altitude du terrain (MNT 2 m) interpolée : la voirie épouse le relief sans marches. */
+function solB(p: XY): number {
+  if (!terrain) return alt0;
+  const { bbox, nT, mnt } = terrain;
+  const fx = (p.x - bbox[0]) / 2 - 0.5, fy = (bbox[3] - p.y) / 2 - 0.5;
+  const c = Math.max(0, Math.min(nT - 2, Math.floor(fx))), r = Math.max(0, Math.min(nT - 2, Math.floor(fy)));
+  const u = Math.max(0, Math.min(1, fx - c)), v = Math.max(0, Math.min(1, fy - r));
+  const z = (i: number, j: number) => mnt[j * nT + i]!;
+  const q = [z(c, r), z(c + 1, r), z(c, r + 1), z(c + 1, r + 1)];
+  if (!q.every(Number.isFinite)) return solA(p);
+  return (q[0]! * (1 - u) + q[1]! * u) * (1 - v) + (q[2]! * (1 - u) + q[3]! * u) * v;
+}
+
+function construireVoirie3D(v: Voirie) {
+  if (voirie) (libererVoirie(voirie), scene.remove(voirie));
+  voirie = creerVoirie3D(v, (p, dz) => local(p, solB(p) + dz), mobile);
+  scene.add(voirie);
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -163,6 +185,7 @@ worker.onmessage = (e) => {
     chargement(null);
     alerte(m.texte);
   } else if (m.type === 'pret') construireRelief(m);
+  else if (m.type === 'voirie') construireVoirie3D(m.v);
   else if (m.type === 'progression') ($('barre').firstElementChild as HTMLElement).style.width = `${m.f * 100}%`;
   else if (m.type === 'resultat') afficherResultat(m);
 };
@@ -276,7 +299,10 @@ async function charger(a: Adresse) {
   $('resultat').hidden = true;
   chargement('Bâtiments IGN…');
   try {
-    batiments = await batimentsAutour(a.position, RAYON + 20);
+    [batiments, troncons] = await Promise.all([
+      batimentsAutour(a.position, RAYON + 20),
+      tronconsAutour(a.position, RAYON + 40).catch(() => [] as Troncon[]), // la voirie est un plus : jamais bloquante
+    ]);
   } catch (e) {
     chargement(null);
     return alerte((e as Error).message);
@@ -341,6 +367,9 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
     scene.add(facades);
     geos.forEach((g) => g.dispose());
   }
+
+  // Voirie (chaussée, trottoirs, bordures, marquages), calculée dans le worker.
+  if (troncons.length) envoyer({ type: 'voirie', troncons, batiments, emprise: bbox });
 
   // Orthophoto IGN (~30 cm), décodée hors du fil principal.
   const indic = $('modePhoto');
