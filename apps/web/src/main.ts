@@ -6,6 +6,7 @@ import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type 
 import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie } from './voirie3d';
+import { catalogueMonuments, chargerMonuments, emprisesMonuments, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
@@ -122,6 +123,8 @@ let alt0 = 0;
 let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
+let monuments: Monument[] = [];
+let groupeMonuments: THREE.Group | null = null;
 let terrain: Terrain | null = null;
 let selBat: Batiment | null = null;
 let facade: { a: XY; b: XY; normale: XY; azimut: number; point: XY } | null = null;
@@ -299,10 +302,13 @@ async function charger(a: Adresse) {
   $('resultat').hidden = true;
   chargement('Bâtiments IGN…');
   try {
-    [batiments, troncons] = await Promise.all([
+    let cat: Monument[];
+    [batiments, troncons, cat] = await Promise.all([
       batimentsAutour(a.position, RAYON + 20),
       tronconsAutour(a.position, RAYON + 40).catch(() => [] as Troncon[]), // la voirie est un plus : jamais bloquante
+      catalogueMonuments(),
     ]);
+    monuments = monumentsDans(cat, [a.l93.x - RAYON, a.l93.y - RAYON, a.l93.x + RAYON, a.l93.y + RAYON]);
   } catch (e) {
     chargement(null);
     return alerte((e as Error).message);
@@ -322,9 +328,11 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   const col = new Float32Array(n * n * 3);
   const teintes = [new THREE.Color(0x8d877d), new THREE.Color(0xe3d8c6), new THREE.Color(0x4f7a45)];
+  // sous un monument modélisé, le relief LiDAR (qui contient l'édifice) est ramené au sol (MNT)
+  const dansMonument = emprisesMonuments(monuments, batiments);
   for (let i = 0; i < n * n; i++) {
-    pos.setY(i, hauteurs[i]! - alt0);
     const x = pos.getX(i) + adresse!.l93.x, y = -pos.getZ(i) + adresse!.l93.y;
+    pos.setY(i, (monuments.length && dansMonument({ x, y }) ? solA({ x, y }) : hauteurs[i]!) - alt0);
     uv.setXY(i, (x - bbox[0]) / taille, (bbox[3] - y) / taille);
     teintes[classes[i]!]!.toArray(col, i * 3);
   }
@@ -345,7 +353,7 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
   const geos: THREE.BufferGeometry[] = [];
   const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   for (const b of batiments) {
-    if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5) continue;
+    if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5 || remplace(monuments, b)) continue;
     const cx = b.contour.reduce((s, p) => s + p.x, 0) / b.contour.length, cy = b.contour.reduce((s, p) => s + p.y, 0) / b.contour.length;
     const base = solA({ x: cx, y: cy });
     const forme = new THREE.Shape(b.contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
@@ -366,6 +374,17 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
     facades.castShadow = facades.receiveShadow = true;
     scene.add(facades);
     geos.forEach((g) => g.dispose());
+  }
+
+  // Monuments modélisés (Open Landmarks), à leur position et altitude réelles.
+  if (groupeMonuments) (libererMonuments(groupeMonuments), scene.remove(groupeMonuments), (groupeMonuments = null));
+  if (monuments.length) {
+    const ici = adresse;
+    chargerMonuments(monuments, (p, z) => local(p, z), mobile).then((g) => {
+      if (adresse !== ici) return libererMonuments(g);
+      groupeMonuments = g;
+      scene.add(g);
+    });
   }
 
   // Voirie (chaussée, trottoirs, bordures, marquages), calculée dans le worker.

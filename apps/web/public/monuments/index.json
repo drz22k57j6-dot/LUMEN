@@ -1,0 +1,1166 @@
+{
+ "repere": "Lambert-93 (EPSG:2154), altitudes NGF ; modèles géoréférencés à l’échelle réelle (X est, Y haut, Z sud)",
+ "monuments": [
+  {
+   "nom": "Arc de Triomphe",
+   "fichier": "arc-de-triomphe.glb",
+   "x": 648291.99,
+   "y": 6863981.17,
+   "sol_alt": 58.87,
+   "cap_deg": 0,
+   "rayon_m": 28.8,
+   "hauteur_m": 50,
+   "ids": [
+    "BATIMENT0000000000157326"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/arc-de-triomphe/ Textures v2 : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN, à l'échelle des assises réelles ; nuances, coulures et salissures générées (non mesurées) ; or PBR (dorures redorées 2023-24), vert-de-gris, zinc, fer, verre générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Arc de Triomphe du Carrousel",
+   "fichier": "arc-du-carrousel.glb",
+   "x": 651058.45,
+   "y": 6862617.23,
+   "sol_alt": 35.59,
+   "cap_deg": 0,
+   "rayon_m": 10.0,
+   "hauteur_m": 18,
+   "ids": [
+    "BATIMENT0000000245184964",
+    "BATIMENT0000000245184963"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/arc-du-carrousel/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Barrière du Trône - Philippe Auguste",
+   "fichier": "barriere-du-trone-philippe-auguste.glb",
+   "x": 655853.64,
+   "y": 6861049.59,
+   "sol_alt": 52.0,
+   "cap_deg": 0,
+   "rayon_m": 6.1,
+   "hauteur_m": 28,
+   "ids": [
+    "BATIMENT0000000227881314"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/barriere-du-trone-philippe-auguste/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Bourse de Commerce",
+   "fichier": "bourse-de-commerce.glb",
+   "x": 651787.16,
+   "y": 6862732.3,
+   "sol_alt": 35.87,
+   "cap_deg": 0,
+   "rayon_m": 34.6,
+   "hauteur_m": 36.3,
+   "ids": [
+    "BATIMENT0000000000161034",
+    "BATIMENT0000000000161035"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/bourse-de-commerce/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Centre Georges Pompidou",
+   "fichier": "centre-georges-pompidou.glb",
+   "x": 652490.18,
+   "y": 6862472.13,
+   "sol_alt": 34.42,
+   "cap_deg": 0,
+   "rayon_m": 87.5,
+   "hauteur_m": 42.4,
+   "ids": [
+    "BATIMENT0000000000161473"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/centre-georges-pompidou/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Cirque d'Hiver",
+   "fichier": "cirque-d-hiver.glb",
+   "x": 653602.72,
+   "y": 6862791.25,
+   "sol_alt": 34.59,
+   "cap_deg": 0,
+   "rayon_m": 43.5,
+   "hauteur_m": 17.2,
+   "ids": [
+    "BATIMENT0000000245187138"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/cirque-d-hiver/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Cité des Sciences et de l'Industrie",
+   "fichier": "cite-des-sciences.glb",
+   "x": 655127.06,
+   "y": 6866360.58,
+   "sol_alt": 45.18,
+   "cap_deg": 0,
+   "rayon_m": 145.3,
+   "hauteur_m": 40,
+   "ids": [
+    "BATIMENT0000000245181629",
+    "BATIMENT0000000245181646",
+    "BATIMENT0000000245181647",
+    "BATIMENT0000000245179064",
+    "BATIMENT0000000245181630",
+    "BATIMENT0000000245181631",
+    "BATIMENT0000000245179066",
+    "BATIMENT0000000245179063",
+    "BATIMENT0000000245181645",
+    "BATIMENT0000000245181648",
+    "BATIMENT0000000245181649"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/cite-des-sciences/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Colonne de Juillet",
+   "fichier": "colonne-de-juillet.glb",
+   "x": 653708.79,
+   "y": 6861643.4,
+   "sol_alt": 37.63,
+   "cap_deg": 0,
+   "rayon_m": 9.1,
+   "hauteur_m": 46.3,
+   "ids": [],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/colonne-de-juillet/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Couvent Saint-François",
+   "fichier": "couvent-saint-francois.glb",
+   "x": 650830.56,
+   "y": 6858671.23,
+   "sol_alt": 68.27,
+   "cap_deg": 0,
+   "rayon_m": 28.1,
+   "hauteur_m": 20,
+   "ids": [
+    "BATIMENT0000000241915132"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/couvent-saint-francois/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église nouvelle Saint-Honoré d'Eylau",
+   "fichier": "eglise-nouvelle-saint-honore-d-eylau.glb",
+   "x": 647652.73,
+   "y": 6863390.23,
+   "sol_alt": 60.5,
+   "cap_deg": 0,
+   "rayon_m": 31.3,
+   "hauteur_m": 16.0,
+   "ids": [
+    "BATIMENT0000000245170200"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/eglise-nouvelle-saint-honore-d-eylau/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Germain l'Auxerrois",
+   "fichier": "eglise-saint-germain-l-auxerrois.glb",
+   "x": 651675.69,
+   "y": 6862363.48,
+   "sol_alt": 35.29,
+   "cap_deg": 0,
+   "rayon_m": 40.4,
+   "hauteur_m": 34,
+   "ids": [
+    "BATIMENT0000000227876612",
+    "BATIMENT0000000245184933",
+    "BATIMENT0000000253248238"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/eglise-saint-germain-l-auxerrois/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Grand Palais",
+   "fichier": "grand-palais.glb",
+   "x": 649556.5,
+   "y": 6863122.76,
+   "sol_alt": 34.83,
+   "cap_deg": 0,
+   "rayon_m": 120.7,
+   "hauteur_m": 60,
+   "ids": [
+    "BATIMENT0000000245172546",
+    "BATIMENT0000000245172471"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/grand-palais/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Grande Halle de la Villette",
+   "fichier": "grande-halle-de-la-villette.glb",
+   "x": 655332.22,
+   "y": 6865828.02,
+   "sol_alt": 52.35,
+   "cap_deg": 0,
+   "rayon_m": 123.2,
+   "hauteur_m": 19,
+   "ids": [
+    "BATIMENT0000000240771658"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/grande-halle-de-la-villette/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hôtel de Günsburg",
+   "fichier": "hotel-de-gunsburg.glb",
+   "x": 648317.63,
+   "y": 6864124.45,
+   "sol_alt": 55.94,
+   "cap_deg": 0,
+   "rayon_m": 26.5,
+   "hauteur_m": 21,
+   "ids": [
+    "BATIMENT0000000245164378",
+    "BATIMENT0000000245164458",
+    "BATIMENT0000000245164380",
+    "BATIMENT0000000245164393"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/hotel-de-gunsburg/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hôtel de Lamoignon",
+   "fichier": "hotel-de-lamoignon.glb",
+   "x": 653182.84,
+   "y": 6862055.2,
+   "sol_alt": 36.21,
+   "cap_deg": 0,
+   "rayon_m": 36.6,
+   "hauteur_m": 15,
+   "ids": [
+    "BATIMENT0000000245185815"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/hotel-de-lamoignon/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hôtel de Soubise",
+   "fichier": "hotel-de-soubise.glb",
+   "x": 652875.66,
+   "y": 6862449.57,
+   "sol_alt": 36.1,
+   "cap_deg": 0,
+   "rayon_m": 64.8,
+   "hauteur_m": 19,
+   "ids": [],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/hotel-de-soubise/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hôtel de Sully",
+   "fichier": "hotel-de-sully.glb",
+   "x": 653317.5,
+   "y": 6861808.43,
+   "sol_alt": 34.22,
+   "cap_deg": 0,
+   "rayon_m": 34.2,
+   "hauteur_m": 16,
+   "ids": [
+    "BATIMENT0000000245197410"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/hotel-de-sully/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hyatt Regency Paris Etoile",
+   "fichier": "hyatt-regency-paris-etoile.glb",
+   "x": 647512.29,
+   "y": 6864706.76,
+   "sol_alt": 36.47,
+   "cap_deg": 0,
+   "rayon_m": 43.1,
+   "hauteur_m": 174,
+   "ids": [
+    "BATIMENT0000000253247800"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/hyatt-regency-paris-etoile/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Institut d'Art et d'Archéologie",
+   "fichier": "institut-d-art-et-d-archeologie.glb",
+   "x": 651270.86,
+   "y": 6860448.55,
+   "sol_alt": 53.09,
+   "cap_deg": 0,
+   "rayon_m": 25.7,
+   "hauteur_m": 20,
+   "ids": [
+    "BATIMENT0000000241930140"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/institut-d-art-et-d-archeologie/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Hôtel des Invalides",
+   "fichier": "invalides.glb",
+   "x": 649566.0,
+   "y": 6861983.94,
+   "sol_alt": 38.75,
+   "cap_deg": 0,
+   "rayon_m": 141.8,
+   "hauteur_m": 100,
+   "ids": [
+    "BATIMENT0000000253244903",
+    "BATIMENT0000000253244904",
+    "BATIMENT0000002007005296",
+    "BATIMENT0000000253244905",
+    "BATIMENT0000000241926729",
+    "BATIMENT0000000241926728",
+    "BATIMENT0000002007005295",
+    "BATIMENT0000000241926715"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/invalides/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "La Canopée des Halles",
+   "fichier": "la-canopee-des-halles.glb",
+   "x": 652103.37,
+   "y": 6862627.56,
+   "sol_alt": 35.99,
+   "cap_deg": 0,
+   "rayon_m": 88.7,
+   "hauteur_m": 15.3,
+   "ids": [
+    "BATIMENT0000000356564161"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/la-canopee-des-halles/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "La Samaritaine",
+   "fichier": "la-samaritaine.glb",
+   "x": 651751.59,
+   "y": 6862339.67,
+   "sol_alt": 30.06,
+   "cap_deg": 0,
+   "rayon_m": 61.9,
+   "hauteur_m": 32,
+   "ids": [
+    "BATIMENT0000000253248234",
+    "BATIMENT0000000245185614"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/la-samaritaine/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais du Louvre",
+   "fichier": "louvre.glb",
+   "x": 651273.53,
+   "y": 6862536.84,
+   "sol_alt": 25.15,
+   "cap_deg": 0,
+   "rayon_m": 355.7,
+   "hauteur_m": 38,
+   "ids": [
+    "BATIMENT0000000245184875",
+    "BATIMENT0000000245185612",
+    "BATIMENT0000000245185609",
+    "BATIMENT0000000245185610",
+    "BATIMENT0000000245185621",
+    "BATIMENT0000000245185608",
+    "BATIMENT0000000245185607",
+    "BATIMENT0000000245185620",
+    "BATIMENT0000000245185618",
+    "BATIMENT0000002007491720",
+    "BATIMENT0000000245185619",
+    "BATIMENT0000000245185617",
+    "BATIMENT0000000245185616",
+    "BATIMENT0000000253246143",
+    "BATIMENT0000000245160141",
+    "BATIMENT0000000245185611",
+    "BATIMENT0000000245160142",
+    "BATIMENT0000000253248249"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/louvre/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Pyramide du Louvre",
+   "fichier": "louvre-pyramid.glb",
+   "x": 651273.72,
+   "y": 6862535.87,
+   "sol_alt": 25.15,
+   "cap_deg": 0,
+   "rayon_m": 23.9,
+   "hauteur_m": 21.7,
+   "ids": [
+    "BATIMENT0000000245184969"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/louvre-pyramid/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église de la Madeleine",
+   "fichier": "madeleine.glb",
+   "x": 650446.88,
+   "y": 6863545.39,
+   "sol_alt": 35.71,
+   "cap_deg": 0,
+   "rayon_m": 67.6,
+   "hauteur_m": 36.2,
+   "ids": [
+    "BATIMENT0000000000158567"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/madeleine/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Maison de la Radio et de la Musique",
+   "fichier": "maison-de-la-radio.glb",
+   "x": 647045.11,
+   "y": 6861624.99,
+   "sol_alt": 33.77,
+   "cap_deg": 0,
+   "rayon_m": 80.9,
+   "hauteur_m": 68,
+   "ids": [
+    "BATIMENT0000000253237583",
+    "BATIMENT0000000253237577",
+    "BATIMENT0000000253237579",
+    "BATIMENT0000000253237581",
+    "BATIMENT0000000253237578",
+    "BATIMENT0000000245171313",
+    "BATIMENT0000000245171315",
+    "BATIMENT0000000253237582",
+    "BATIMENT0000000309681539",
+    "BATIMENT0000000253237580"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/maison-de-la-radio/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Marché Saint-Germain",
+   "fichier": "marche-saint-germain.glb",
+   "x": 651272.39,
+   "y": 6861543.64,
+   "sol_alt": 38.9,
+   "cap_deg": 0,
+   "rayon_m": 48.8,
+   "hauteur_m": 16.2,
+   "ids": [
+    "BATIMENT0000000241937879",
+    "BATIMENT0000000241937880"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/marche-saint-germain/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Musée d'Art Moderne de Paris",
+   "fichier": "musee-d-art-moderne-de-paris.glb",
+   "x": 648488.89,
+   "y": 6862928.86,
+   "sol_alt": 33.26,
+   "cap_deg": 0,
+   "rayon_m": 50.2,
+   "hauteur_m": 14,
+   "ids": [
+    "BATIMENT0000000000160608"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/musee-d-art-moderne-de-paris/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Musée d'Orsay",
+   "fichier": "musee-dorsay.glb",
+   "x": 650589.23,
+   "y": 6862421.18,
+   "sol_alt": 34.15,
+   "cap_deg": 0,
+   "rayon_m": 98.7,
+   "hauteur_m": 35,
+   "ids": [
+    "BATIMENT0000000241935505",
+    "BATIMENT0000000241935507"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/musee-dorsay/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Musée Guimet",
+   "fichier": "musee-guimet.glb",
+   "x": 648176.5,
+   "y": 6863052.85,
+   "sol_alt": 46.84,
+   "cap_deg": 0,
+   "rayon_m": 38.0,
+   "hauteur_m": 20,
+   "ids": [
+    "BATIMENT0000000000160624",
+    "BATIMENT0000000245166053"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/musee-guimet/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Cathédrale Notre-Dame de Paris",
+   "fichier": "notre-dame.glb",
+   "x": 652297.65,
+   "y": 6861633.34,
+   "sol_alt": 33.95,
+   "cap_deg": 0,
+   "rayon_m": 66.9,
+   "hauteur_m": 96,
+   "ids": [
+    "BATIMENT0000000245184819",
+    "BATIMENT0000000305564422",
+    "BATIMENT0000000245184818",
+    "BATIMENT0000000245184816",
+    "BATIMENT0000000245184817",
+    "BATIMENT0000000245184146",
+    "BATIMENT0000000305564421"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/notre-dame/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Notre-Dame-de-la-Croix",
+   "fichier": "notre-dame-de-la-croix.glb",
+   "x": 655068.27,
+   "y": 6863350.59,
+   "sol_alt": 63.43,
+   "cap_deg": 0,
+   "rayon_m": 47.5,
+   "hauteur_m": 78,
+   "ids": [
+    "BATIMENT0000000253251798",
+    "BATIMENT0000000240763583",
+    "BATIMENT0000000253251814",
+    "BATIMENT0000000290021613",
+    "BATIMENT0000000240763582",
+    "BATIMENT0000000240763585",
+    "BATIMENT0000000240763581"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/notre-dame-de-la-croix/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Obélisque de Louxor",
+   "fichier": "obelisque-de-louxor.glb",
+   "x": 650197.91,
+   "y": 6863041.4,
+   "sol_alt": 33.63,
+   "cap_deg": 0,
+   "rayon_m": 2.6,
+   "hauteur_m": 33.4,
+   "ids": [
+    "BATIMENT0000000245198908"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/obelisque-de-louxor/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Odéon–Théâtre de l'Europe",
+   "fichier": "odeon.glb",
+   "x": 651473.73,
+   "y": 6861253.94,
+   "sol_alt": 43.4,
+   "cap_deg": 0,
+   "rayon_m": 30.1,
+   "hauteur_m": 28,
+   "ids": [
+    "BATIMENT0000000241936602"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/odeon/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Opéra Garnier",
+   "fichier": "opera-garnier.glb",
+   "x": 650980.65,
+   "y": 6863762.07,
+   "sol_alt": 35.64,
+   "cap_deg": 0,
+   "rayon_m": 79.0,
+   "hauteur_m": 58,
+   "ids": [
+    "BATIMENT0000000253247655",
+    "BATIMENT0000000253245873",
+    "BATIMENT0000000253245869",
+    "BATIMENT0000000245200051"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/opera-garnier/ Textures v2 : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN, à l'échelle des assises réelles ; nuances, coulures et salissures générées (non mesurées) ; or PBR (dorures redorées 2023-24), vert-de-gris, zinc, fer, verre générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais Bourbon",
+   "fichier": "palais-bourbon.glb",
+   "x": 649985.74,
+   "y": 6862615.42,
+   "sol_alt": 33.54,
+   "cap_deg": 0,
+   "rayon_m": 88.8,
+   "hauteur_m": 27.4,
+   "ids": [
+    "BATIMENT0000000253246142",
+    "BATIMENT0000000241927831",
+    "BATIMENT0000000241927830",
+    "BATIMENT0000000316907249",
+    "BATIMENT0000000241935086",
+    "BATIMENT0000000241935088",
+    "BATIMENT0000000253246139"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-bourbon/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais de Chaillot",
+   "fichier": "palais-de-chaillot.glb",
+   "x": 647789.58,
+   "y": 6862698.07,
+   "sol_alt": 60.36,
+   "cap_deg": 0,
+   "rayon_m": 167.5,
+   "hauteur_m": 30,
+   "ids": [
+    "BATIMENT0000000245168717",
+    "BATIMENT0000000245168716",
+    "BATIMENT0000000253247092",
+    "BATIMENT0000000253247090"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-de-chaillot/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais de Justice de Paris",
+   "fichier": "palais-de-justice.glb",
+   "x": 651901.72,
+   "y": 6861951.31,
+   "sol_alt": 31.27,
+   "cap_deg": 0,
+   "rayon_m": 129.6,
+   "hauteur_m": 42.0,
+   "ids": [
+    "BATIMENT0000000245190031",
+    "BATIMENT0000000245159796",
+    "BATIMENT0000000245185646",
+    "BATIMENT0000000245185645",
+    "BATIMENT0000000245185647",
+    "BATIMENT0000000316903597"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-de-justice/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais de l'Élysée",
+   "fichier": "palais-de-lelysee.glb",
+   "x": 649867.23,
+   "y": 6863582.89,
+   "sol_alt": 32.48,
+   "cap_deg": 0,
+   "rayon_m": 64.9,
+   "hauteur_m": 12,
+   "ids": [
+    "BATIMENT0000000245171830"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-de-lelysee/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais de Tokyo",
+   "fichier": "palais-de-tokyo.glb",
+   "x": 648388.17,
+   "y": 6862911.76,
+   "sol_alt": 32.89,
+   "cap_deg": 0,
+   "rayon_m": 59.1,
+   "hauteur_m": 14,
+   "ids": [
+    "BATIMENT0000000000160632",
+    "BATIMENT0000000000160626",
+    "BATIMENT0000000000160635",
+    "BATIMENT0000000000160636",
+    "BATIMENT0000000000160633"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-de-tokyo/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais du Luxembourg",
+   "fichier": "palais-du-luxembourg.glb",
+   "x": 651365.35,
+   "y": 6861140.82,
+   "sol_alt": 43.52,
+   "cap_deg": 0,
+   "rayon_m": 76.4,
+   "hauteur_m": 32,
+   "ids": [
+    "BATIMENT0000000241937838",
+    "BATIMENT0000000241937839",
+    "BATIMENT0000000241937837",
+    "BATIMENT0000000241937840"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-du-luxembourg/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais Galliera",
+   "fichier": "palais-galliera.glb",
+   "x": 648403.44,
+   "y": 6863078.68,
+   "sol_alt": 44.02,
+   "cap_deg": 0,
+   "rayon_m": 38.2,
+   "hauteur_m": 13,
+   "ids": [
+    "BATIMENT0000000245166256"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-galliera/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Palais Royal",
+   "fichier": "palais-royal.glb",
+   "x": 651353.66,
+   "y": 6862813.29,
+   "sol_alt": 34.48,
+   "cap_deg": 0,
+   "rayon_m": 85.4,
+   "hauteur_m": 30,
+   "ids": [
+    "BATIMENT0000000253248247",
+    "BATIMENT0000000245185223",
+    "BATIMENT0000002007520021"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/palais-royal/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Panthéon",
+   "fichier": "pantheon.glb",
+   "x": 652012.01,
+   "y": 6860882.42,
+   "sol_alt": 58.56,
+   "cap_deg": 0,
+   "rayon_m": 59.1,
+   "hauteur_m": 90,
+   "ids": [
+    "BATIMENT0000000253232436",
+    "BATIMENT0000000241930812"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/pantheon/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Petit Palais",
+   "fichier": "petit-palais.glb",
+   "x": 649743.47,
+   "y": 6863106.42,
+   "sol_alt": 37.33,
+   "cap_deg": 0,
+   "rayon_m": 65.0,
+   "hauteur_m": 42,
+   "ids": [
+    "BATIMENT0000000245171551"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/petit-palais/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Porte Saint-Denis",
+   "fichier": "porte-saint-denis.glb",
+   "x": 652516.74,
+   "y": 6863501.96,
+   "sol_alt": 36.13,
+   "cap_deg": 0,
+   "rayon_m": 12.5,
+   "hauteur_m": 25,
+   "ids": [
+    "BATIMENT0000000000158427"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/porte-saint-denis/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Porte Saint-Martin",
+   "fichier": "porte-saint-martin.glb",
+   "x": 652733.61,
+   "y": 6863428.22,
+   "sol_alt": 35.84,
+   "cap_deg": 0,
+   "rayon_m": 9.3,
+   "hauteur_m": 18,
+   "ids": [
+    "BATIMENT0000000245193427",
+    "BATIMENT0000000245193435",
+    "BATIMENT0000000356564156",
+    "BATIMENT0000000245193419",
+    "BATIMENT0000000245193434"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/porte-saint-martin/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Rotonde de Chartres",
+   "fichier": "rotonde-de-chartres.glb",
+   "x": 649328.66,
+   "y": 6864692.46,
+   "sol_alt": 45.0,
+   "cap_deg": 0,
+   "rayon_m": 7.5,
+   "hauteur_m": 20,
+   "ids": [
+    "BATIMENT0000000245173441"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/rotonde-de-chartres/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Basilique du Sacré-Cœur",
+   "fichier": "sacre-coeur.glb",
+   "x": 651823.34,
+   "y": 6865395.79,
+   "sol_alt": 119.16,
+   "cap_deg": 0,
+   "rayon_m": 49.0,
+   "hauteur_m": 84,
+   "ids": [
+    "BATIMENT0000000253248827",
+    "BATIMENT0000000253248831",
+    "BATIMENT0000000253248847"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/sacre-coeur/ Textures v2 : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN, à l'échelle des assises réelles ; nuances, coulures et salissures générées (non mesurées) ; or PBR (dorures redorées 2023-24), vert-de-gris, zinc, fer, verre générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Cathédrale Saint-Alexandre-Nevsky",
+   "fichier": "saint-alexandre-nevsky.glb",
+   "x": 648805.9,
+   "y": 6864402.66,
+   "sol_alt": 45.43,
+   "cap_deg": 0,
+   "rayon_m": 14.5,
+   "hauteur_m": 48,
+   "ids": [
+    "BATIMENT0000000245164852"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-alexandre-nevsky/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Augustin",
+   "fichier": "saint-augustin.glb",
+   "x": 650043.48,
+   "y": 6864239.04,
+   "sol_alt": 35.01,
+   "cap_deg": 0,
+   "rayon_m": 45.3,
+   "hauteur_m": 83,
+   "ids": [
+    "BATIMENT0000000245200209"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-augustin/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Germain des Prés",
+   "fichier": "saint-germain-des-pres.glb",
+   "x": 651167.72,
+   "y": 6861752.98,
+   "sol_alt": 36.58,
+   "cap_deg": 0,
+   "rayon_m": 51.0,
+   "hauteur_m": 60,
+   "ids": [
+    "BATIMENT0000000241937884"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-germain-des-pres/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Jean-Baptiste de Belleville",
+   "fichier": "saint-jean-baptiste-de-belleville.glb",
+   "x": 655208.61,
+   "y": 6864132.61,
+   "sol_alt": 98.77,
+   "cap_deg": 0,
+   "rayon_m": 34.9,
+   "hauteur_m": 57,
+   "ids": [
+    "BATIMENT0000000253252179",
+    "BATIMENT0000000253252178",
+    "BATIMENT0000000253252188",
+    "BATIMENT0000000240770812",
+    "BATIMENT0000000253252195"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-jean-baptiste-de-belleville/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Chapelle Saint-Louis de la Salpêtrière",
+   "fichier": "saint-louis-de-la-salpetriere.glb",
+   "x": 653328.87,
+   "y": 6860065.41,
+   "sol_alt": 38.11,
+   "cap_deg": 0,
+   "rayon_m": 36.0,
+   "hauteur_m": 50,
+   "ids": [
+    "BATIMENT0000000241933019"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-louis-de-la-salpetriere/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Pierre de Montmartre",
+   "fichier": "saint-pierre-de-montmartre.glb",
+   "x": 651752.57,
+   "y": 6865387.78,
+   "sol_alt": 129.78,
+   "cap_deg": 0,
+   "rayon_m": 27.3,
+   "hauteur_m": 26,
+   "ids": [
+    "BATIMENT0000000245181606",
+    "BATIMENT0000000245181605"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-pierre-de-montmartre/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Roch",
+   "fichier": "saint-roch.glb",
+   "x": 651044.7,
+   "y": 6863023.93,
+   "sol_alt": 34.78,
+   "cap_deg": 0,
+   "rayon_m": 57.0,
+   "hauteur_m": 30,
+   "ids": [
+    "BATIMENT0000000253245851",
+    "BATIMENT0000000253245840",
+    "BATIMENT0000000253245835"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-roch/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Sulpice",
+   "fichier": "saint-sulpice.glb",
+   "x": 651190.47,
+   "y": 6861422.58,
+   "sol_alt": 36.34,
+   "cap_deg": 0,
+   "rayon_m": 63.2,
+   "hauteur_m": 70.3,
+   "ids": [
+    "BATIMENT0000000253245361",
+    "BATIMENT0000000241937858",
+    "BATIMENT0000000241937855",
+    "BATIMENT0000000241937856",
+    "BATIMENT0000000241937859"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-sulpice/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Église Saint-Vincent-de-Paul",
+   "fichier": "saint-vincent-de-paul.glb",
+   "x": 652468.96,
+   "y": 6864521.83,
+   "sol_alt": 52.84,
+   "cap_deg": 0,
+   "rayon_m": 47.3,
+   "hauteur_m": 45,
+   "ids": [
+    "BATIMENT0000000245196698",
+    "BATIMENT0000000245196699",
+    "BATIMENT0000000245196700"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/saint-vincent-de-paul/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Sainte-Chapelle",
+   "fichier": "sainte-chapelle.glb",
+   "x": 651941.35,
+   "y": 6861904.8,
+   "sol_alt": 32.74,
+   "cap_deg": 0,
+   "rayon_m": 20.2,
+   "hauteur_m": 75,
+   "ids": [
+    "BATIMENT0000000245190033"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/sainte-chapelle/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Théâtre de la Ville",
+   "fichier": "theatre-de-la-ville.glb",
+   "x": 652165.62,
+   "y": 6862114.18,
+   "sol_alt": 36.51,
+   "cap_deg": 0,
+   "rayon_m": 29.7,
+   "hauteur_m": 29,
+   "ids": [
+    "BATIMENT0000000245157315",
+    "BATIMENT0000000245157307",
+    "BATIMENT0000000245157299"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/theatre-de-la-ville/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Théâtre du Châtelet",
+   "fichier": "theatre-du-chatelet.glb",
+   "x": 652033.17,
+   "y": 6862171.35,
+   "sol_alt": 36.04,
+   "cap_deg": 0,
+   "rayon_m": 50.5,
+   "hauteur_m": 29,
+   "ids": [
+    "BATIMENT0000000245157300",
+    "BATIMENT0000000314624332",
+    "BATIMENT0000000245157317",
+    "BATIMENT0000000314624333",
+    "BATIMENT0000000245157301"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/theatre-du-chatelet/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Théâtre du Rond-Point",
+   "fichier": "theatre-du-rond-point.glb",
+   "x": 649448.16,
+   "y": 6863299.74,
+   "sol_alt": 32.84,
+   "cap_deg": 0,
+   "rayon_m": 30.6,
+   "hauteur_m": 26,
+   "ids": [
+    "BATIMENT0000000245171635"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/theatre-du-rond-point/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Théâtre Marigny",
+   "fichier": "theatre-marigny.glb",
+   "x": 649658.48,
+   "y": 6863405.78,
+   "sol_alt": 32.8,
+   "cap_deg": 0,
+   "rayon_m": 25.7,
+   "hauteur_m": 15,
+   "ids": [
+    "BATIMENT0000000245171643"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/theatre-marigny/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Tour de l'Horloge",
+   "fichier": "tour-de-l-horloge.glb",
+   "x": 653977.86,
+   "y": 6860698.58,
+   "sol_alt": 38.87,
+   "cap_deg": 0,
+   "rayon_m": 6.8,
+   "hauteur_m": 67,
+   "ids": [
+    "BATIMENT0000000240741689"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/tour-de-l-horloge/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Tour Mirabeau",
+   "fichier": "tour-mirabeau.glb",
+   "x": 647107.54,
+   "y": 6860985.42,
+   "sol_alt": 31.75,
+   "cap_deg": 0,
+   "rayon_m": 37.4,
+   "hauteur_m": 58.2,
+   "ids": [
+    "BATIMENT0000000241918654"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/tour-mirabeau/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Tour Montparnasse",
+   "fichier": "tour-montparnasse.glb",
+   "x": 650237.8,
+   "y": 6860443.03,
+   "sol_alt": 52.11,
+   "cap_deg": 0,
+   "rayon_m": 32.0,
+   "hauteur_m": 210,
+   "ids": [
+    "BATIMENT0000000241929410"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/tour-montparnasse/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Tour Saint-Jacques",
+   "fichier": "tour-saint-jacques.glb",
+   "x": 652229.43,
+   "y": 6862192.68,
+   "sol_alt": 36.53,
+   "cap_deg": 0,
+   "rayon_m": 7.8,
+   "hauteur_m": 52,
+   "ids": [
+    "BATIMENT0000000245157308"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/tour-saint-jacques/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Tour Super-Italie",
+   "fichier": "tour-super-italie.glb",
+   "x": 652962.76,
+   "y": 6858169.23,
+   "sol_alt": 55.41,
+   "cap_deg": 0,
+   "rayon_m": 16.7,
+   "hauteur_m": 112,
+   "ids": [
+    "BATIMENT0000000241909792"
+   ],
+   "source": "Open Landmarks (modèle CC BY ; données © contributeurs OpenStreetMap, ODbL) — open-landmarks.benmaps.fr/landmarks/tour-super-italie/ Textures (moteur_textures) : pierre/enduit/ardoise Poly Haven (CC0) teintés à la couleur mesurée sur la BD ORTHO IGN quand elle existe, sinon couleur du modèle ; nuances, coulures, salissures générées (non mesurées) ; or, vert-de-gris, zinc, fer, verre, peintures générés.",
+   "verifie": "position et dimensions : modèle géoréférencé à l'échelle réelle (ancre, mètres) ; sol : LiDAR IGN ; version « preview » du catalogue (peut contenir des brouillons non relus)"
+  },
+  {
+   "nom": "Mobilier de rue — Place du Tertre",
+   "fichier": "montmartre.glb",
+   "x": 651653.02,
+   "y": 6865368.02,
+   "sol_alt": 125.5,
+   "cap_deg": 0,
+   "rayon_m": 2,
+   "hauteur_m": 4.2,
+   "ids": [],
+   "source": "« Streets of Montmartre prop preview » par bryanvanderlinden (Sketchfab), licence CC BY 4.0 — sketchfab.com/3d-models/6e56011fecee4017b6df531e21869af7. Lampadaire, chevalet de peintre, vélo, poubelle, panneau ; plaque de sol de démo retirée ; allégé (0,4 Mo).",
+   "verifie": "échelle : celle du modèle (mètres, lampadaire 4,2 m) ; position choisie à la main sur un espace piéton libre (aucun bâtiment IGN à moins de 6 m) ; sol : RGE ALTI IGN"
+  },
+  {
+   "nom": "Mobilier de rue — Parvis du Sacré-Cœur",
+   "fichier": "montmartre.glb",
+   "x": 651822.81,
+   "y": 6865326.57,
+   "sol_alt": 122.86,
+   "cap_deg": 0,
+   "rayon_m": 2,
+   "hauteur_m": 4.2,
+   "ids": [],
+   "source": "« Streets of Montmartre prop preview » par bryanvanderlinden (Sketchfab), licence CC BY 4.0 — sketchfab.com/3d-models/6e56011fecee4017b6df531e21869af7. Lampadaire, chevalet de peintre, vélo, poubelle, panneau ; plaque de sol de démo retirée ; allégé (0,4 Mo).",
+   "verifie": "échelle : celle du modèle (mètres, lampadaire 4,2 m) ; position choisie à la main sur un espace piéton libre (aucun bâtiment IGN à moins de 6 m) ; sol : RGE ALTI IGN"
+  }
+ ]
+}
