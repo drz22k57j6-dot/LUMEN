@@ -88,4 +88,65 @@ export function ensoleillementAnnuel(p: ParamsEnsoleillement): ResultatJour[] {
   return Array.from({ length: 12 }, (_, m) => ensoleillementJour(p, new Date(Date.UTC(p.annee, m, 21, 12))));
 }
 
+// --- Ensoleillement d'une pièce (plusieurs fenêtres, plusieurs points) -------
+
+export interface FenetreAnalyse {
+  /** Points d'échantillonnage (repère local), déjà décalés hors de la façade. */
+  points: [number, number, number][];
+  /** Azimut de la normale sortante (degrés). */
+  azimut: number;
+}
+
+export interface ParamsPiece {
+  lieu: LonLat;
+  fenetres: FenetreAnalyse[];
+  annee: number;
+  pasMinutes?: number;
+  obstacle: TestObstacle;
+}
+
+/**
+ * Minutes de soleil direct d'une pièce pour une journée.
+ * À chaque pas : fraction éclairée = max sur les fenêtres de (points éclairés / points).
+ * `minutes` = somme pondérée (minutes équivalentes « fenêtre pleinement au soleil »).
+ */
+export function ensoleillementPieceJour(p: ParamsPiece, jour: Date): ResultatJour {
+  const pas = p.pasMinutes ?? 10;
+  const { lever, coucher } = leverCoucher(jour, p.lieu);
+  const res: ResultatJour = { date: jour, minutes: 0, plages: [] };
+  if (!lever || !coucher || p.fenetres.length === 0) return res;
+  let enCours: Plage | null = null;
+  let total = 0;
+  for (let t = lever.getTime(); t <= coucher.getTime(); t += pas * 60_000) {
+    const d = new Date(t);
+    const s = positionSoleil(d, p.lieu);
+    let fraction = 0;
+    if (s.elevation > 0) {
+      const dir = directionSoleil(s);
+      for (const f of p.fenetres) {
+        if (ecartAngle(s.azimut, f.azimut) >= 90 || f.points.length === 0) continue;
+        let n = 0;
+        for (const pt of f.points) if (!p.obstacle(pt, dir)) n++;
+        fraction = Math.max(fraction, n / f.points.length);
+        if (fraction === 1) break;
+      }
+    }
+    total += pas * fraction;
+    if (fraction > 0) {
+      if (!enCours) enCours = { debut: d, fin: d };
+      enCours.fin = d;
+    } else if (enCours) {
+      res.plages.push(enCours);
+      enCours = null;
+    }
+  }
+  if (enCours) res.plages.push(enCours);
+  res.minutes = Math.round(total);
+  return res;
+}
+
+export function ensoleillementPieceAnnuel(p: ParamsPiece): ResultatJour[] {
+  return Array.from({ length: 12 }, (_, m) => ensoleillementPieceJour(p, new Date(Date.UTC(p.annee, m, 21, 12))));
+}
+
 export * from './grille';
