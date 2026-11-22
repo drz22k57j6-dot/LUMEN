@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh';
 import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type XY } from '@lumen/core';
 import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
@@ -10,6 +11,7 @@ import { catalogueMonuments, chargerMonuments, emprisesMonuments, libererMonumen
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
+import { Habillage, styleDe, type TacheFacade } from './habillage';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -30,6 +32,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
+// Éclairage d'ambiance réaliste (reflets du zinc, des vitres et de la pierre).
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.45;
 scene.fog = new THREE.Fog(0x9cc4ef, 500, 1400);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 6000);
 camera.position.set(260, 320, 380);
@@ -56,7 +61,7 @@ scene.add(fondSol);
 
 // Matériau du relief : orthophoto sur les surfaces horizontales, couleur de classe sur les murs.
 const uniformes = { uPhoto: { value: 1 } };
-const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.3 });
 matRelief.onBeforeCompile = (s) => {
   s.uniforms.uPhoto = uniformes.uPhoto;
   s.fragmentShader = s.fragmentShader
@@ -313,14 +318,15 @@ async function charger(a: Adresse) {
     chargement(null);
     return alerte((e as Error).message);
   }
-  envoyer({ type: 'charger', centre: a.l93, rayon: RAYON, emprises: batiments.map((b) => b.contour) });
+  envoyer({ type: 'charger', centre: a.l93, rayon: RAYON, rayonDetail: 150, emprises: batiments.map((b) => b.contour) });
 }
 
-function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float32Array; classes: Uint8Array; mnt: Float32Array; nT: number; couverture: number }) {
-  terrain = { bbox: m.bbox, n: m.n, mnt: m.mnt, nT: m.nT, couverture: m.couverture, surf: m.hauteurs };
-  alt0 = solA(adresse!.l93);
-  const { n, bbox, hauteurs, classes } = m;
-  const taille = bbox[2] - bbox[0];
+type Grille2 = { n: number; bbox: Terrain['bbox']; hauteurs: Float32Array; classes: Uint8Array };
+
+/** Maillage d'une grille d'altitudes (sommets aux centres des cellules), UV sur l'orthophoto globale. */
+function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y: number) => boolean) {
+  const { n, bbox, hauteurs, classes } = g;
+  const taille = bbox[2] - bbox[0], tO = bboxOrtho[2] - bboxOrtho[0];
   const geo = new THREE.PlaneGeometry(taille - taille / n, taille - taille / n, n - 1, n - 1);
   geo.rotateX(-Math.PI / 2);
   geo.translate(bbox[0] + taille / 2 - adresse!.l93.x, 0, -(bbox[1] + taille / 2 - adresse!.l93.y));
@@ -332,21 +338,90 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
   const dansMonument = emprisesMonuments(monuments, batiments);
   for (let i = 0; i < n * n; i++) {
     const x = pos.getX(i) + adresse!.l93.x, y = -pos.getZ(i) + adresse!.l93.y;
-    pos.setY(i, (monuments.length && dansMonument({ x, y }) ? solA({ x, y }) : hauteurs[i]!) - alt0);
-    uv.setXY(i, (x - bbox[0]) / taille, (bbox[3] - y) / taille);
+    pos.setY(i, basse?.(x, y) ? solA({ x, y }) - alt0 - 3 : (monuments.length && dansMonument({ x, y }) ? solA({ x, y }) : hauteurs[i]!) - alt0);
+    uv.setXY(i, (x - bboxOrtho[0]) / tO, (bboxOrtho[3] - y) / tO);
     teintes[classes[i]!]!.toArray(col, i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
   geo.computeBoundsTree();
+  const m = new THREE.Mesh(geo, matRelief);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
 
-  if (relief) {
-    relief.geometry.dispose();
-    scene.remove(relief);
+/** Façades sur rue à habiller dans la zone de détail. */
+function tachesFacades(zone: Terrain['bbox']): TacheFacade[] {
+  const t: (TacheFacade & { d: number })[] = [];
+  const dans = (p: XY) => p.x > zone[0] && p.x < zone[2] && p.y > zone[1] && p.y < zone[3];
+  for (const b of batiments) {
+    if (!b.contour.every(dans) || b.hauteur.source !== 'mesure' || b.hauteur.valeur < 5 || remplace(monuments, b)) continue;
+    const toit = b.altitudeSol.valeur + b.hauteur.valeur;
+    const style = styleDe(b.id, b.hauteur.valeur);
+    b.contour.forEach((p, i) => {
+      const q2 = b.contour[(i + 1) % b.contour.length]!;
+      const L = Math.hypot(q2.x - p.x, q2.y - p.y);
+      if (L < 4) return;
+      const dx = (q2.x - p.x) / L, dy = (q2.y - p.y) / L;
+      const m = { x: (p.x + q2.x) / 2, y: (p.y + q2.y) / 2 };
+      let nrm = { x: dy, y: -dx }, A = p, B = q2;
+      if (contient(b.contour, { x: m.x + nrm.x * 0.6, y: m.y + nrm.y * 0.6 })) (nrm = { x: -dy, y: dx }), (A = q2), (B = p);
+      if (devant(m, nrm) > toit - 3) return; // mur mitoyen
+      // Rue ou grande cour : espace dégagé sur au moins 6 m devant la façade.
+      if (Math.max(surfA({ x: m.x + nrm.x * 5, y: m.y + nrm.y * 5 }), surfA({ x: m.x + nrm.x * 6.5, y: m.y + nrm.y * 6.5 })) > toit - 3) return;
+      const base = solA({ x: m.x + nrm.x * 1.5, y: m.y + nrm.y * 1.5 });
+      const la = local(A, 0), lb = local(B, 0);
+      const d = Math.hypot(m.x - adresse!.l93.x, m.y - adresse!.l93.y);
+      if (d > 150) return;
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, hGout: toit - base, style, lod: d < (mobile ? 40 : 70) ? 0 : 1, d });
+    });
   }
-  relief = new THREE.Mesh(geo, matRelief);
-  relief.castShadow = relief.receiveShadow = true;
-  scene.add(relief);
+  return t.sort((u, v) => u.d - v.d);
+}
+
+/** Abaisse le LiDAR sous les toits générés (bande de 7 m derrière chaque façade habillée). */
+function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
+  const { n, bbox } = g;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+  const base0 = alt0 - 60;
+  const px = (lx: number, lz: number) => [(lx + adresse!.l93.x - bbox[0]) / 0.5, (bbox[3] - (adresse!.l93.y - lz)) / 0.5] as const;
+  for (const t of taches) {
+    const [ax, az] = t.a, [bx, bz] = t.b;
+    const W = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / W, dz = (bz - az) / W;
+    const ix = dz * 7, iz = -dx * 7; // vers l'intérieur
+    const v = Math.max(1, Math.min(255, Math.round(t.y + alt0 + t.hGout - base0)));
+    ctx.fillStyle = `rgb(${v},0,0)`;
+    ctx.beginPath();
+    const pts = [px(ax, az), px(bx, bz), px(bx + ix, bz + iz), px(ax + ix, az + iz)];
+    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.fill();
+  }
+  const d = ctx.getImageData(0, 0, n, n).data;
+  for (let i = 0; i < n * n; i++) {
+    const v = d[i * 4]!;
+    if (v && g.classes[i] === 1) g.hauteurs[i] = Math.min(g.hauteurs[i]!, base0 + v - 0.4);
+  }
+}
+
+let detail: THREE.Mesh | null = null;
+const habillage = new Habillage(import.meta.env.BASE_URL + 'tex/');
+scene.add(habillage.groupe);
+
+function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couverture: number; detail: Grille2 }) {
+  terrain = { bbox: m.bbox, n: m.n, mnt: m.mnt, nT: m.nT, couverture: m.couverture, surf: m.hauteurs };
+  alt0 = solA(adresse!.l93);
+  const { bbox } = m;
+  const zD = m.detail.bbox;
+  for (const r of [relief, detail]) if (r) (r.geometry.dispose(), scene.remove(r));
+  // Large zone à 1 m, creusée là où la zone de détail à 50 cm prend le relais.
+  relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
+  const taches = tachesFacades(zD);
+  abaisserSousFacades(m.detail, taches);
+  detail = maillage(m.detail, bbox);
+  scene.add(relief, detail);
+  habillage.lancer(taches);
   fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
 
   // Murs des immeubles
@@ -354,6 +429,7 @@ function construireRelief(m: { n: number; bbox: Terrain['bbox']; hauteurs: Float
   const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   for (const b of batiments) {
     if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5 || remplace(monuments, b)) continue;
+    if (b.contour.every((p) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3])) continue; // zone de détail : LiDAR 50 cm + façades générées
     const cx = b.contour.reduce((s, p) => s + p.x, 0) / b.contour.length, cy = b.contour.reduce((s, p) => s + p.y, 0) / b.contour.length;
     const base = solA({ x: cx, y: cy });
     const forme = new THREE.Shape(b.contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
@@ -539,7 +615,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => (depart = { x: e.clie
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!relief || vueFenetre || Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > 8 || performance.now() - depart.t > 500) return;
   ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  const hit = ray.intersectObject(relief)[0];
+  const hit = ray.intersectObjects([detail, relief, habillage.groupe].filter(Boolean) as THREE.Object3D[], true)[0];
   if (hit) choisir(versL93(hit.point));
 });
 
@@ -603,8 +679,8 @@ $('calculer').onclick = () => {
   const tangente = { x: -f.normale.y, y: f.normale.x };
   // 3 points sur la largeur de la fenêtre (1,2 m), à 1 m devant la façade (résolution LiDAR 50 cm).
   const points = [-0.5, 0, 0.5].map((s) => ({
-    x: f.point.x + f.normale.x * 1.0 + tangente.x * s,
-    y: f.point.y + f.normale.y * 1.0 + tangente.y * s,
+    x: f.point.x + f.normale.x * 0.3 + tangente.x * s,
+    y: f.point.y + f.normale.y * 0.3 + tangente.y * s,
     z,
   }));
   $<HTMLButtonElement>('calculer').disabled = true;
@@ -706,6 +782,10 @@ feuille.addEventListener('pointerdown', () => feuille.classList.remove('reduite'
 // Boucle
 // ---------------------------------------------------------------------------
 let avant = performance.now();
+let interaction = false;
+controls.addEventListener('start', () => (interaction = true));
+controls.addEventListener('end', () => (interaction = false));
+let dureeHab = 0;
 renderer.setAnimationLoop((t) => {
   if (document.body.classList.contains('studio')) return; // le Studio 3D a son propre rendu
   const dt = Math.min(0.1, (t - avant) / 1000);
@@ -714,6 +794,13 @@ renderer.setAnimationLoop((t) => {
     heure.value = String((+heure.value + dt * 90) % 1440);
     majSoleil();
   }
+  const tH = performance.now();
+  habillage.etape(interaction ? (mobile ? 6 : 10) : mobile ? 22 : 30);
+  dureeHab += performance.now() - tH;
+  const p = habillage.progression;
+  const ft = $('facadesTxt');
+  ft.hidden = p >= 1;
+  if (p < 1) ft.textContent = `Façades ${Math.round(p * 100)} %`;
   controls.update();
   renderer.render(scene, camera);
 });
@@ -721,7 +808,7 @@ majTrajet();
 majSoleil();
 
 // Diagnostic (tests automatisés)
-(window as unknown as { __lumen: unknown }).__lumen = { facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+(window as unknown as { __lumen: unknown }).__lumen = { hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).

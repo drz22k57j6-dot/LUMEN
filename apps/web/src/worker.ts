@@ -1,11 +1,11 @@
 import { fromArrayBuffer } from 'geotiff';
 import { debutJourParis, type LonLat, type XY } from '@lumen/core';
-import { ensoleillementAnnee, type Grille } from '@lumen/analysis';
+import { altitude, ensoleillementAnnee, type Grille } from '@lumen/analysis';
 import { construireVoirie, COUCHES, urlWms, type Troncon } from '@lumen/urban';
 import type { Batiment } from '@lumen/core';
 
 export type Requete =
-  | { type: 'charger'; centre: XY; rayon: number; emprises: XY[][] }
+  | { type: 'charger'; centre: XY; rayon: number; rayonDetail: number; emprises: XY[][] }
   | { type: 'voirie'; troncons: Troncon[]; batiments: Batiment[]; emprise: [number, number, number, number] }
   | { type: 'calculer'; lieu: LonLat; points: { x: number; y: number; z: number }[]; azimut: number; annee: number };
 
@@ -103,19 +103,42 @@ async function charger(q: Extract<Requete, { type: 'charger' }>) {
       else if (nv >= 2) (hauteurs[k] = veg), (classes[k] = 2);
       else (hauteurs[k] = sol), (classes[k] = 0);
     }
+  // Zone de détail (50 cm) autour de l'adresse.
+  const nD = Math.round((2 * q.rayonDetail) / 0.5);
+  const o = Math.round((nS - nD) / 2);
+  const hD = new Float32Array(nD * nD);
+  const cD = new Uint8Array(nD * nD);
+  for (let r = 0; r < nD; r++)
+    for (let c = 0; c < nD; c++) {
+      const i = (r + o) * nS + c + o;
+      const k = classe[i]!;
+      hD[r * nD + c] = masque[i] || k === 2 ? zS[i]! : solCell[i]!;
+      cD[r * nD + c] = masque[i] ? 1 : k === 2 ? 2 : 0;
+    }
+  const bboxD = [bbox[0] + o * 0.5, bbox[3] - (o + nD) * 0.5, bbox[0] + (o + nD) * 0.5, bbox[3] - o * 0.5];
   post(
-    { type: 'pret', n, res: 1, bbox, hauteurs, classes, mnt: zT.slice(), nT, couverture: 1 - trous / (nS * nS) },
-    [hauteurs.buffer, classes.buffer],
+    { type: 'pret', n, res: 1, bbox, hauteurs, classes, mnt: zT.slice(), nT, couverture: 1 - trous / (nS * nS), detail: { n: nD, bbox: bboxD, hauteurs: hD, classes: cD } },
+    [hauteurs.buffer, classes.buffer, hD.buffer, cD.buffer],
   );
 }
 
 function calculer(q: Extract<Requete, { type: 'calculer' }>) {
   if (!mns) throw new Error('Données non chargées');
   const t0 = performance.now();
+  // Le contour cadastral et le LiDAR peuvent être décalés (corniches, recalage) : on avance chaque point
+  // vers la rue jusqu'à sortir du volume mesuré de l'immeuble, pour ne pas compter son propre toit comme obstacle.
+  const az = (q.azimut * Math.PI) / 180, nx = Math.sin(az), ny = Math.cos(az);
+  const points = q.points.map((o) => {
+    for (let t = 0; t <= 3; t += 0.25) {
+      const x = o.x + nx * t, y = o.y + ny * t;
+      if (!(altitude(mns!, x, y) > o.z - 0.2)) return { x: x + nx * 0.3, y: y + ny * 0.3, z: o.z };
+    }
+    return o;
+  });
   const r = ensoleillementAnnee({
     lieu: q.lieu,
     grille: mns,
-    points: q.points,
+    points,
     azimutFacade: q.azimut,
     annee: q.annee,
     debutJour: debutJourParis,
