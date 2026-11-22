@@ -121,3 +121,5 @@ h2 { font-size: 15px; margin: 14px 0 6px; }
 #stJoy > div { width: 46px; height: 46px; border-radius: 50%; background: #ffffffcc; }
 #edVoir3D { background: #2a3550; color: #fff; }
 #stPied .ligne { flex-wrap: wrap; }
+#edEchelle { gap: 6px; font-size: 13px; }
+#edEchelle input { width: 80px; padding: 6px; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; }
