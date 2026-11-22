@@ -6,6 +6,7 @@ import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type 
 import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
 import { batimentsAutour, contient, COUCHES, geocoder, urlWms } from '@lumen/urban';
 import type { Requete } from './worker';
+import { initPlan2D } from './plan2d';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -671,3 +672,7 @@ majSoleil();
 
 // Diagnostic (tests automatisés)
 (window as unknown as { __lumen: unknown }).__lumen = { facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+
+// Étape 1 : plan 2D du logement (indépendant de la 3D).
+const plan2d = initPlan2D();
+$('monPlan').onclick = plan2d.ouvrir;
