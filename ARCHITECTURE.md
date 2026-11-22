@@ -32,7 +32,7 @@ lumen/
 | **Urban** | adresse | emprises + hauteurs des bâtiments, relief, arbres (rayon 300–500 m) | Géoplateforme : géocodage, BD TOPO (WFS), LiDAR HD (MNS/MNT/MNH) |
 | **Building** | bâtiment + étage | volume, toit, façades orientées, fenêtres | BD TOPO, LiDAR HD (toits), Panoramax (photos rue) |
 | **Interior** | plan / USDZ / builder | pièces, murs, ouvertures, logement 3D | saisie, RoomPlan (via Polycam / 3D Scanner App) |
-| **Analysis** | fenêtres + scène | heures de soleil direct par pièce, mois, saison ; rapport PDF | algorithme NREL SPA, lancer de rayons sur la scène |
+| **Analysis** | fenêtres + MNS | minutes de soleil direct sur 365 jours, cause des ombres (bâti, arbres, relief) ; rapport PDF | VSOP87, lancer de rayons sur le MNS LiDAR HD 50 cm |
 
 ## Modèle de données (core)
 ```
@@ -44,7 +44,7 @@ Chaque champ : { valeur, source, origine, precision_m? }
 Repère : Lambert-93 (EPSG:2154) pour les calculs, converti en repère local (mètres, origine = bâtiment) pour le rendu.
 
 ## Calcul d'ensoleillement (Analysis)
-1. Position du soleil : NREL SPA (azimut/élévation, précision ±0,0003°).
+1. Position du soleil : éphémérides VSOP87 (astronomy-engine, précision < 1″), réfraction incluse.
 2. Pour chaque fenêtre, on échantillonne des points (grille 3×3), puis on trace un rayon vers le soleil toutes les 10 min, sur 12 jours types (le 21 de chaque mois).
 3. Un rayon est bloqué par : les bâtiments voisins, le relief, les arbres (MNH, avec transparence selon la saison), le propre bâtiment (tableau de fenêtre, balcon).
 4. Sortie : minutes de soleil direct par jour et par pièce, plages horaires, synthèse par saison.

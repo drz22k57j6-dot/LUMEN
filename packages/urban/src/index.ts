@@ -94,3 +94,18 @@ export function contient(contour: XY[], p: XY): boolean {
   }
   return dedans;
 }
+
+// --- Rasters LiDAR HD / orthophotos (WMS-R Géoplateforme) ---------------
+export const COUCHES = {
+  mns: 'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93',
+  mnt: 'IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93',
+  ortho: 'HR.ORTHOIMAGERY.ORTHOPHOTOS',
+} as const;
+
+/** URL WMS-R en Lambert-93 pour une emprise [xmin, ymin, xmax, ymax]. */
+export function urlWms(couche: string, bbox: [number, number, number, number], w: number, h: number, format: string): string {
+  return (
+    `${GEOPF}/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${couche}&STYLES=` +
+    `&CRS=EPSG:2154&BBOX=${bbox.join(',')}&WIDTH=${w}&HEIGHT=${h}&FORMAT=${encodeURIComponent(format)}`
+  );
+}

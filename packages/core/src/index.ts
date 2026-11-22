@@ -78,3 +78,17 @@ export class RepereLocal {
 
 /** Azimut (degrés depuis le nord, horaire) d'un vecteur Lambert-93 (dx est, dy nord). */
 export const azimutDe = (dx: number, dy: number): number => ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+
+// --- Heure de Paris -----------------------------------------------------
+const fmtParis = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Paris', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+});
+/** Instant UTC (ms) correspondant à une heure murale à Paris. */
+export function utcDepuisParis(annee: number, mois0: number, jour: number, minutes = 0): number {
+  const naif = Date.UTC(annee, mois0, jour, 0, minutes);
+  const p = fmtParis.formatToParts(new Date(naif)).reduce<Record<string, string>>((a, x) => ((a[x.type] = x.value), a), {});
+  const vu = Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!);
+  return naif - (vu - naif);
+}
+/** Début de la journée murale à Paris pour le n-ième jour (0 = 1er janvier). */
+export const debutJourParis = (annee: number, jourAnnee: number) => utcDepuisParis(annee, 0, 1 + jourAnnee);

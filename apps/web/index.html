@@ -2,37 +2,78 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Lumen — ensoleillement</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0e1320" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Lumen — ensoleillement réel</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%23ffc21a%22/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <canvas id="c"></canvas>
-    <form id="recherche">
-      <input id="q" type="search" placeholder="Adresse (ex. 12 rue Mouffetard, Paris)" autocomplete="off" />
-      <button>OK</button>
+
+    <header id="haut">
+      <form id="recherche" autocomplete="off">
+        <span class="logo">◐</span>
+        <input id="q" type="search" placeholder="Adresse en France" enterkeyhint="search" />
+      </form>
       <ul id="suggestions"></ul>
-    </form>
-    <div id="panneau">
-      <div id="statut">Saisis une adresse pour commencer.</div>
-      <div class="ligne">
-        <input id="jour" type="date" />
-        <button id="lecture" type="button">▶</button>
-        <span id="heureTxt"></span>
+      <div id="outils" hidden>
+        <button id="modePhoto" class="pastille actif" type="button">Photo</button>
+        <button id="modeMaquette" class="pastille" type="button">Maquette</button>
+        <button id="vueFenetre" class="pastille" type="button" hidden>👁 Vue fenêtre</button>
       </div>
-      <input id="heure" type="range" min="0" max="1439" step="5" />
-      <div id="selection" hidden>
-        <div id="infoBat"></div>
+    </header>
+
+    <div id="chargement" hidden><div class="spin"></div><span id="chargementTxt"></span></div>
+
+    <section id="feuille">
+      <div class="poignee"></div>
+
+      <div id="accueil">
+        <h1>Le vrai soleil de chaque fenêtre.</h1>
+        <p>Tape une adresse : on reconstruit le quartier au LiDAR IGN (50 cm), toits et arbres compris, puis on calcule chaque minute de soleil de l'année.</p>
+      </div>
+
+      <div id="temps" hidden>
         <div class="ligne">
-          <label>Étage <input id="etage" type="number" min="0" max="60" value="2" /></label>
-          <label>Hauteur d'étage <input id="hEtage" type="number" min="2.4" max="5" step="0.1" value="3" /> m</label>
+          <button id="lecture" class="rond" type="button" aria-label="Lecture">▶</button>
+          <div class="col">
+            <div class="ligne serre"><b id="heureTxt">13:00</b><span id="soleilTxt" class="doux"></span></div>
+            <input id="heure" type="range" min="0" max="1439" step="1" value="780" />
+          </div>
         </div>
-        <div id="infoFacade">Touche une façade pour placer la fenêtre.</div>
-        <button id="calculer" type="button" disabled>Calculer l'ensoleillement</button>
+        <div class="ligne dates">
+          <button class="pastille" data-date="03-20" type="button">Équinoxe</button>
+          <button class="pastille" data-date="06-21" type="button">21 juin</button>
+          <button class="pastille" data-date="12-21" type="button">21 déc.</button>
+          <input id="jour" type="date" />
+        </div>
       </div>
-      <div id="resultat"></div>
-      <div class="mention">Données © IGN (BD TOPO, Géoplateforme) — Licence Ouverte 2.0</div>
-    </div>
+
+      <div id="etapeBat" hidden>
+        <p id="aide" class="aide">Touche le mur de l'immeuble, à l'endroit de la fenêtre.</p>
+        <div id="infoBat"></div>
+        <div id="reglages" hidden>
+          <div class="ligne">
+            <span>Étage</span>
+            <div class="stepper"><button id="moins" type="button">−</button><b id="etageTxt">2</b><button id="plus" type="button">+</button></div>
+            <span class="doux">hauteur d'étage</span>
+            <select id="hEtage">
+              <option value="2.7">2,7 m</option><option value="3" selected>3,0 m</option><option value="3.3">3,3 m (haussmannien)</option><option value="3.6">3,6 m</option>
+            </select>
+          </div>
+          <div id="infoFacade" class="doux"></div>
+          <button id="calculer" class="principal" type="button">Calculer l'ensoleillement de l'année</button>
+          <div id="barre" hidden><div></div></div>
+        </div>
+      </div>
+
+      <div id="resultat" hidden></div>
+
+      <footer class="mention">Données © IGN — LiDAR HD, BD TOPO, BD ORTHO (Licence Ouverte 2.0) · Soleil : éphémérides VSOP87</footer>
+    </section>
+
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

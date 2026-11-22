@@ -87,3 +87,5 @@ export function ensoleillementJour(p: ParamsEnsoleillement, jour: Date): Resulta
 export function ensoleillementAnnuel(p: ParamsEnsoleillement): ResultatJour[] {
   return Array.from({ length: 12 }, (_, m) => ensoleillementJour(p, new Date(Date.UTC(p.annee, m, 21, 12))));
 }
+
+export * from './grille';

@@ -75,3 +75,30 @@ describe('urban — BD TOPO', () => {
     expect(b && contient(b.contour, versL93({ lon: 2.34665, lat: 48.84535 }))).toBe(true);
   });
 });
+
+import { Code, ensoleillementAnnee, lancerRayon, type Grille } from './analysis/src';
+import { debutJourParis } from './core/src';
+
+describe('analysis — rayons sur MNS', () => {
+  // Grille 100 m × 100 m à 1 m, sol à 0, mur de 20 m de haut au sud (lignes 70 à 72).
+  const n = 100;
+  const z = new Float32Array(n * n);
+  const classe = new Uint8Array(n * n);
+  for (let r = 70; r < 73; r++) for (let c = 0; c < n; c++) (z[r * n + c] = 20), (classe[r * n + c] = 1);
+  const g: Grille = { x0: 0, y0: 100, res: 1, w: n, h: n, z, classe, zMax: 20 };
+  it('le mur bloque un soleil bas venant du sud', () => {
+    expect(lancerRayon(g, { x: 50, y: 50, z: 1 }, [0, -Math.cos(0.3), Math.sin(0.3)])).toBe(Code.OmbreBatiment);
+  });
+  it('un soleil haut passe au-dessus', () => {
+    expect(lancerRayon(g, { x: 50, y: 50, z: 1 }, [0, -Math.cos(1.2), Math.sin(1.2)])).toBe(Code.Soleil);
+  });
+  it('année complète : le mur coupe le soleil d’hiver', () => {
+    const r = ensoleillementAnnee({
+      lieu: { lon: 2.35, lat: 48.85 }, grille: g, points: [{ x: 50, y: 50, z: 1 }], azimutFacade: 180, annee: 2026, debutJour: debutJourParis,
+    });
+    const jour = (j: number) => { let m = 0; for (let k = 0; k < r.creneaux; k++) if (r.codes[j * r.creneaux + k] === Code.Soleil) m++; return m; };
+    expect(r.jours).toBe(365);
+    expect(jour(354)).toBe(0); // 21 déc. : soleil < 18°, mur à 21 m sous ~26° → ombre
+    expect(jour(171)).toBeGreaterThan(30); // 21 juin : soleil haut
+  });
+});
