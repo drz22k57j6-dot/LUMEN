@@ -518,11 +518,11 @@ function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
     bande(t, -0.5, -2.5);
   }
   ctx.fillStyle = 'rgb(1,0,0)';
-  for (const t of taches) bande(t, 0.7, -0.5);
+  for (const t of taches) bande(t, 1.5, -0.5);
   const d = ctx.getImageData(0, 0, n, n).data;
   for (let i = 0; i < n * n; i++) {
     const v = d[i * 4]!;
-    if (!v || d[i * 4 + 3]! < 250) continue;
+    if (!v || d[i * 4 + 3]! === 0) continue; // pixels de bord inclus : sinon des pics LiDAR restent devant la façade
     const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
     if (v === 1) {
       g.hauteurs[i] = solA({ x, y });
@@ -531,6 +531,32 @@ function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
       const gout = base0 + v;
       if (g.hauteurs[i]! < gout) (g.hauteurs[i] = gout), (g.classes[i] = 1);
     }
+  }
+}
+
+/** Le LiDAR « bâtiment » hors des emprises IGN (élargies de 1 m) est ramené au sol :
+ *  supprime les rideaux en dents de scie (marches du raster 50 cm) le long des murs. */
+function nettoyerBords(g: Grille2) {
+  const { n, bbox } = g;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2; // 1 m de marge autour de chaque emprise
+  ctx.lineJoin = 'round';
+  for (const b of batiments) {
+    ctx.beginPath();
+    b.contour.forEach((p, k) => { const x = (p.x - bbox[0]) / 0.5, y = (bbox[3] - p.y) / 0.5; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  const d = ctx.getImageData(0, 0, n, n).data;
+  for (let i = 0; i < n * n; i++) {
+    if (g.classes[i] !== 1 || d[i * 4 + 3]! > 0) continue;
+    const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
+    g.hauteurs[i] = solA({ x, y });
+    g.classes[i] = 0;
   }
 }
 
@@ -573,6 +599,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const taches = tachesFacades(m.detail);
   (window as unknown as { __taches: unknown }).__taches = taches;
   abaisserSousFacades(m.detail, taches);
+  nettoyerBords(m.detail);
   detail = maillage(m.detail, bbox);
   scene.add(relief, detail);
   habillage.lancer(taches);
