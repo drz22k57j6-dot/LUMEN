@@ -11,6 +11,7 @@ import { Nuages, transmission } from './ciel/nuages';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { creerSolUrbain, orthoSol } from './sol3d';
+import { adressesAutour, creerPlaques, type AdresseBan, type PanFacade } from './plaques';
 import { creerHerbe, masqueHerbe, type Herbe } from './herbe';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
@@ -473,6 +474,7 @@ async function charger(a: Adresse) {
   reinitialiserSelection();
   $('resultat').hidden = true;
   chargement('Bâtiments IGN…');
+  adressesBan = adressesAutour(a.position.lon, a.position.lat, RAYON).catch(() => []);
   try {
     let cat: Monument[];
     [batiments, troncons, cat] = await Promise.all([
@@ -685,6 +687,39 @@ function planterArbres(bbox: Terrain['bbox']) {
 }
 
 let detail: THREE.Mesh | null = null;
+
+// Plaques de rue et numéros (BAN + BD TOPO), posés sur les façades visibles.
+let adressesBan: Promise<AdresseBan[]> = Promise.resolve([]);
+let plaques: THREE.Group | null = null;
+async function poserPlaques(taches: TacheFacade[], zD: Terrain['bbox']) {
+  const a = adresse!;
+  const adr = await adressesBan;
+  if (adresse !== a) return;
+  const pans: PanFacade[] = taches.map((t) => {
+    const A = versL93(new THREE.Vector3(t.a[0], 0, t.a[1])), B = versL93(new THREE.Vector3(t.b[0], 0, t.b[1]));
+    const L = Math.hypot(B.x - A.x, B.y - A.y) || 1;
+    // normale sortante du générateur (-dz, dx) en repère local → (est, nord)
+    const dx = (t.b[0] - t.a[0]) / L, dz = (t.b[1] - t.a[1]) / L;
+    return { a: A, b: B, n: { x: -dz, y: -dx }, sol: t.y + alt0 };
+  });
+  // Hors zone de détail : les murs BD TOPO sont les façades affichées.
+  const dansD = (p: XY) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3];
+  for (const b of batiments) {
+    if (b.contour.every(dansD) || b.hauteur.valeur < 3) continue;
+    b.contour.forEach((p, i) => {
+      const q = b.contour[(i + 1) % b.contour.length]!;
+      const L = Math.hypot(q.x - p.x, q.y - p.y);
+      if (L < 2) return;
+      let n = { x: (q.y - p.y) / L, y: -(q.x - p.x) / L };
+      const m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+      if (contient(b.contour, { x: m.x + n.x * 0.5, y: m.y + n.y * 0.5 })) n = { x: -n.x, y: -n.y };
+      pans.push({ a: p, b: q, n, sol: solB({ x: m.x + n.x * 1.5, y: m.y + n.y * 1.5 }) });
+    });
+  }
+  if (plaques) (scene.remove(plaques), plaques.traverse((o) => o instanceof THREE.Mesh && (o.geometry.dispose(), (o.material as THREE.MeshStandardMaterial).dispose())));
+  plaques = creerPlaques({ adresses: adr, troncons, pans, local, centre: a.l93, rayon: RAYON, aniso: renderer.capabilities.getMaxAnisotropy() });
+  scene.add(plaques);
+}
 let loin: THREE.Mesh | null = null;
 
 /** Zone lointaine (2 km) : LiDAR à 8 m + orthophoto, creusée sous la zone à 1 m. */
@@ -733,6 +768,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   detail = maillage(m.detail, bbox);
   scene.add(relief, detail);
   habillage.lancer(taches);
+  void poserPlaques(taches, zD);
   fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
 
   // Murs des immeubles
@@ -1272,4 +1308,15 @@ addEventListener('unhandledrejection', (e) => toast(String((e as PromiseRejectio
 // Diagnostic (tests automatisés)
 (window as unknown as { __lumen: unknown }).__lumen = {
   cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)),
+  vers: (i: number) => {
+    const im = plaques?.children[i] as THREE.InstancedMesh | undefined;
+    if (!im) return null;
+    const m = new THREE.Matrix4();
+    im.getMatrixAt(0, m);
+    const p = new THREE.Vector3().setFromMatrixPosition(m), n = new THREE.Vector3(0, 0, 1).transformDirection(m);
+    camera.position.copy(p).addScaledVector(n, 1.6).add(new THREE.Vector3(0, -0.4, 0));
+    controls.target.copy(p);
+    return [(im.geometry as THREE.PlaneGeometry).parameters.width, im.count];
+  },
+  plaques: () => plaques?.children.reduce((n, o) => n + (o as THREE.InstancedMesh).count, 0) ?? 0,
 };

@@ -22,6 +22,9 @@ export interface Troncon {
   sens: Sens;
   /** Sentier, chemin, piste : allée piétonne, sans chaussée. */
   pieton: boolean;
+  /** Nom officiel de la voie (BAN) et commune INSEE, pour les plaques de rue. */
+  nom?: string;
+  insee?: string;
 }
 
 /** Polygone : premier anneau = contour, suivants = trous (Lambert-93, sans point de fermeture). */
@@ -52,6 +55,9 @@ export interface Voirie {
 // Données IGN
 // ---------------------------------------------------------------------------
 interface ProprietesTroncon {
+  nom_voie_ban_gauche?: string | null;
+  nom_voie_ban_droite?: string | null;
+  insee_commune_gauche?: string | null;
   nature: string | null;
   importance: string | null;
   largeur_de_chaussee: number | null;
@@ -86,7 +92,11 @@ export function versTroncon(e: EntiteTroncon): Troncon | null {
       : donnee(pieton ? 2.2 : Math.max(3, voies * 3), 'genere', 'Lumen (largeur type)');
   const s = p.sens_de_circulation;
   const sens: Sens = s === 'Sens direct' ? 'direct' : s === 'Sens inverse' ? 'inverse' : 'double';
-  return { id: e.id, axe, nature: p.nature, importance: Number(p.importance ?? 5) || 5, largeur, voies, sens, pieton };
+  const t: Troncon = { id: e.id, axe, nature: p.nature, importance: Number(p.importance ?? 5) || 5, largeur, voies, sens, pieton };
+  const nom = p.nom_voie_ban_gauche || p.nom_voie_ban_droite;
+  if (nom) t.nom = nom;
+  if (p.insee_commune_gauche) t.insee = p.insee_commune_gauche;
+  return t;
 }
 
 /** Tronçons de route BD TOPO dans un carré de ± rayon mètres autour d'un point. */
