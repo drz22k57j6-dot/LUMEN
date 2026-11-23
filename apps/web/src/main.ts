@@ -6,6 +6,8 @@ import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh';
 import { azimutDe, azimutVrai, utcDepuisParis, versWgs84, versL93 as wgsVersL93, type Adresse, type Batiment, type XY } from '@lumen/core';
 import { Code, directionSoleil, eclairement, positionSoleil } from '@lumen/analysis';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
+import { chargerMeteo, etatA, type GrilleMeteo } from './ciel/meteo';
+import { Nuages, transmission } from './ciel/nuages';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
@@ -71,6 +73,11 @@ ciel.scale.setScalar(8000);
   ciel.material.fragmentShader = 'uniform float uEchelle;\n' + ciel.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uEchelle, 1.0 );');
 }
 scene.add(ciel);
+// Nuages volumétriques pilotés par la météo réelle (ou simulée hors période couverte).
+const nuages = new Nuages(renderer, mobile);
+scene.add(nuages.dome, nuages.ombre);
+let meteo: GrilleMeteo | null = null;
+let meteoCle = '';
 /** Intensité three.js par lux : 100 000 lx de soleil → 3,2. Ratios direct / diffus / sol réels. */
 const PAR_LUX = 3.2 / 100_000;
 
@@ -271,20 +278,48 @@ function majSoleil() {
   // Lumière calculée à travers l'atmosphère (packages/analysis/lumiere.ts), aucun réglage à l'œil.
   const E = eclairement(s.elevation);
   const lin = THREE.LinearSRGBColorSpace;
-  soleil.intensity = PAR_LUX * E.directNormal;
+  // Météo : nuages au bon endroit, et soleil / ciel atténués comme dans la réalité.
+  const cleM = `${lieu().lat.toFixed(2)},${lieu().lon.toFixed(2)},${Math.floor(d.getTime() / 864e5)}`;
+  if (cleM !== meteoCle) {
+    meteoCle = cleM;
+    void chargerMeteo(lieu(), d).then((g) => {
+      if (meteoCle === cleM) (meteo = g), majSoleil();
+    });
+  }
+  const em = meteo ? etatA(meteo, d.getTime()) : null;
+  const tr = em ? transmission(em, s.elevation) : { direct: 1, diffus: 1, niveau: 0, libelle: '' };
+  if (em) {
+    nuages.majMeteo(em);
+    $('meteoTxt').textContent = `${em.reel ? '☁' : '🎲'} ${Math.round(em.total * 100)} % · ${tr.libelle} (${tr.niveau}/24)${em.pluie > 0.2 ? ' · pluie' : ''}`;
+    $('meteoTxt').title = em.source;
+  }
+  soleil.intensity = PAR_LUX * E.directNormal * tr.direct;
   soleil.color.setRGB(...E.couleurSoleil, lin);
-  hemi.intensity = PAR_LUX * E.diffusHorizontal;
+  hemi.intensity = PAR_LUX * E.diffusHorizontal * tr.diffus;
   hemi.color.setRGB(...E.couleurCiel, lin);
   const sol = (0.18 * E.globalHorizontal) / Math.max(E.diffusHorizontal, 1e-6); // albédo urbain 0,18
   hemi.groundColor.setRGB(0.9 * sol, 0.85 * sol, 0.78 * sol, lin);
-  scene.environmentIntensity = 0.3 * (E.diffusHorizontal / 16_700);
+  scene.environmentIntensity = 0.3 * (E.diffusHorizontal / 16_700) * tr.diffus;
   // Exposition automatique, comme un appareil photo (limitée : la nuit reste la nuit).
-  const expo = THREE.MathUtils.clamp(Math.sqrt(100_000 / Math.max(E.globalHorizontal, 1e-3)), 1, 16);
+  const globalReel = E.directNormal * tr.direct * Math.max(0, Math.sin((s.elevation * Math.PI) / 180)) + E.diffusHorizontal * tr.diffus;
+  const expo = THREE.MathUtils.clamp(Math.sqrt(100_000 / Math.max(globalReel, 1e-3)), 1, 16);
   renderer.toneMappingExposure = 1.05 * expo;
   ciel.material.uniforms.sunPosition!.value.set(x, y, z);
   const brume = 0.86 * Math.min(1.2, (E.diffusHorizontal * expo) / 16_700);
   scene.fog!.color.setRGB(E.couleurCiel[0] * brume, E.couleurCiel[1] * brume, E.couleurCiel[2] * brume, lin);
   scene.background = null;
+  if (em) {
+    // Ciel couvert : brume plus grise et plus dense
+    const gris = scene.fog!.color.r * 0.3 + scene.fog!.color.g * 0.59 + scene.fog!.color.b * 0.11;
+    scene.fog!.color.lerp(new THREE.Color(gris, gris, gris), em.total * 0.8);
+  }
+  {
+    const dir = new THREE.Vector3(x, y, z);
+    const cs = new THREE.Color().setRGB(...E.couleurSoleil, lin).multiplyScalar(PAR_LUX * E.directNormal * 0.35 + 1e-4);
+    const ch = new THREE.Color().setRGB(...E.couleurCiel, lin).multiplyScalar(PAR_LUX * E.diffusHorizontal * 1.2 * (0.6 + 0.4 * tr.diffus));
+    const cb = ch.clone().multiplyScalar(0.55);
+    nuages.majLumiere(dir, cs, ch, cb, scene.fog!.color);
+  }
   (disque.material as THREE.MeshBasicMaterial).color.setRGB(...E.couleurSoleil, lin);
   disque.position.set(x * 420, y * 420, z * 420);
   disque.visible = s.elevation > -1 && !vueFenetre;
@@ -1148,6 +1183,13 @@ renderer.setAnimationLoop((t) => {
   ft.hidden = p >= 1;
   if (p < 1) ft.textContent = `Façades ${Math.round(p * 100)} %`;
   controls.update();
+  {
+    const dC = dateCourante();
+    const sec = (dC.getTime() % 864e5) / 1000;
+    const cO = vueFenetre || vueRue ? camera.position : controls.target;
+    camera.updateMatrixWorld();
+    nuages.rendre(camera, sec, cO, soleil.position.clone().sub(soleil.target.position).normalize());
+  }
   renderer.render(scene, camera);
 });
 majTrajet();
@@ -1199,3 +1241,8 @@ const toast = (t: string) => {
 };
 addEventListener('error', (e) => toast(e.message));
 addEventListener('unhandledrejection', (e) => toast(String((e as PromiseRejectionEvent).reason)));
+
+// Diagnostic (tests automatisés)
+(window as unknown as { __lumen: unknown }).__lumen = {
+  cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)),
+};
