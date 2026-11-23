@@ -360,36 +360,71 @@ function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y:
   return m;
 }
 
-/** Façades sur rue à habiller dans la zone de détail. */
-function tachesFacades(zone: Terrain['bbox']): TacheFacade[] {
+/** Façades à habiller dans la zone de détail, calées sur le LiDAR HD :
+ *  pour chaque mur, on lit le profil LiDAR (50 cm) perpendiculaire à la façade tous les 2 m,
+ *  on y trouve la vraie ligne du mur (chute toit → sol) et la vraie hauteur de gouttière/corniche.
+ *  La façade est posée exactement là, à cette hauteur ; seules les fenêtres sont générées. */
+function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
+  const zone = g.bbox;
+  const zB = (x: number, y: number) => {
+    const c = Math.floor((x - zone[0]) / 0.5), r = Math.floor((zone[3] - y) / 0.5);
+    return c < 0 || r < 0 || c >= g.n || r >= g.n ? NaN : g.brut[r * g.n + c]!;
+  };
+  const mediane = (v: number[]) => (v.sort((a2, b2) => a2 - b2), v[Math.floor(v.length / 2)]!);
   const t: (TacheFacade & { d: number })[] = [];
-  const dans = (p: XY) => p.x > zone[0] && p.x < zone[2] && p.y > zone[1] && p.y < zone[3];
+  const dans = (p: XY) => p.x > zone[0] + 8 && p.x < zone[2] - 8 && p.y > zone[1] + 8 && p.y < zone[3] - 8;
   for (const b of batiments) {
-    if (!b.contour.every(dans) || b.hauteur.source !== 'mesure' || b.hauteur.valeur < 5 || remplace(monuments, b)) continue;
-    const toit = b.altitudeSol.valeur + b.hauteur.valeur;
+    if (!b.contour.every(dans) || b.hauteur.valeur < 4 || remplace(monuments, b)) continue;
     const style = styleDe(b.id, b.hauteur.valeur);
     b.contour.forEach((p, i) => {
       const q2 = b.contour[(i + 1) % b.contour.length]!;
       const L = Math.hypot(q2.x - p.x, q2.y - p.y);
-      if (L < 4) return;
+      if (L < 3.5) return;
       const dx = (q2.x - p.x) / L, dy = (q2.y - p.y) / L;
       const m = { x: (p.x + q2.x) / 2, y: (p.y + q2.y) / 2 };
       let nrm = { x: dy, y: -dx }, A = p, B = q2;
       if (contient(b.contour, { x: m.x + nrm.x * 0.6, y: m.y + nrm.y * 0.6 })) (nrm = { x: -dy, y: dx }), (A = q2), (B = p);
-      if (devant(m, nrm) > toit - 3) return; // mur mitoyen
-      // Rue ou grande cour : espace dégagé sur au moins 6 m devant la façade.
-      if (Math.max(surfA({ x: m.x + nrm.x * 5, y: m.y + nrm.y * 5 }), surfA({ x: m.x + nrm.x * 6.5, y: m.y + nrm.y * 6.5 })) > toit - 3) return;
-      const base = solA({ x: m.x + nrm.x * 1.5, y: m.y + nrm.y * 1.5 });
-      const la = local(A, 0), lb = local(B, 0);
-      const d = Math.hypot(m.x - adresse!.l93.x, m.y - adresse!.l93.y);
-      if (d > 150) return;
-      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, hGout: toit - base, style, lod: d < (mobile ? 40 : 70) ? 0 : 1, d });
+      const dist = Math.hypot(m.x - adresse!.l93.x, m.y - adresse!.l93.y);
+      if (dist > 150) return;
+      // Profils LiDAR perpendiculaires
+      const decalages: number[] = [], gouttieres: number[] = [];
+      for (let s2 = Math.min(1, L / 4); s2 <= L - Math.min(1, L / 4) + 1e-6; s2 += Math.max(1.2, Math.min(2, L / 4))) {
+        const o = { x: A.x + ((B.x - A.x) / L) * s2, y: A.y + ((B.y - A.y) / L) * s2 };
+        const sol = solA({ x: o.x + nrm.x * 3, y: o.y + nrm.y * 3 });
+        // Hauteur de référence du toit (intérieur) puis ligne du mur = dernier point au niveau du toit
+        // (les auvents, balcons et arbres, plus bas, ne déplacent pas le mur).
+        let hr = 0;
+        for (let k = -4; k <= -0.5; k += 0.5) hr = Math.max(hr, zB(o.x + nrm.x * k, o.y + nrm.y * k) - sol);
+        if (!(hr > 3)) continue;
+        const seuil = Math.max(2.5, hr * 0.6);
+        let mur = NaN;
+        for (let k = -4; k <= 4; k += 0.5) {
+          const h = zB(o.x + nrm.x * k, o.y + nrm.y * k) - sol;
+          if (h > seuil) mur = k;
+          else if (Number.isFinite(mur) && h < seuil * 0.5) break;
+        }
+        if (!Number.isFinite(mur) || mur >= 4) continue; // pas de chute nette : mitoyen
+        const h1 = zB(o.x + nrm.x * mur, o.y + nrm.y * mur), h2 = zB(o.x + nrm.x * (mur - 0.5), o.y + nrm.y * (mur - 0.5));
+        decalages.push(mur + 0.25);
+        gouttieres.push(Math.min(h1, Number.isFinite(h2) ? h2 : h1));
+      }
+      if (decalages.length < Math.max(1, Math.floor(L / 4))) return;
+      const dec = mediane(decalages), gout = mediane(gouttieres);
+      const A2 = { x: A.x + nrm.x * dec, y: A.y + nrm.y * dec }, B2 = { x: B.x + nrm.x * dec, y: B.y + nrm.y * dec };
+      const m2 = { x: m.x + nrm.x * dec, y: m.y + nrm.y * dec };
+      const base = solA({ x: m2.x + nrm.x * 1.5, y: m2.y + nrm.y * 1.5 });
+      if (gout - base < 3) return;
+      // Rue ou cour : espace dégagé sur au moins 5 m devant la façade.
+      if (Math.max(zB(m2.x + nrm.x * 4, m2.y + nrm.y * 4), zB(m2.x + nrm.x * 5.5, m2.y + nrm.y * 5.5)) > gout - 2) return;
+      const la = local(A2, 0), lb = local(B2, 0);
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, hGout: gout - base, style, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist });
     });
   }
   return t.sort((u, v) => u.d - v.d);
 }
 
-/** Abaisse le LiDAR sous les toits générés (bande de 7 m derrière chaque façade habillée). */
+/** Ajuste le LiDAR autour des façades : sol juste derrière la façade (rien ne passe devant),
+ *  puis relevé à la hauteur de gouttière jusqu'au vrai toit (pas de fente entre façade et toit). */
 function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
   const { n, bbox } = g;
   const cv = document.createElement('canvas');
@@ -397,36 +432,34 @@ function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
   const ctx = cv.getContext('2d', { willReadFrequently: true })!;
   const base0 = alt0 - 60;
   const px = (lx: number, lz: number) => [(lx + adresse!.l93.x - bbox[0]) / 0.5, (bbox[3] - (adresse!.l93.y - lz)) / 0.5] as const;
-  for (const t of taches) {
+  const bande = (t: TacheFacade, de: number, a2: number) => {
     const [ax, az] = t.a, [bx, bz] = t.b;
     const W = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / W, dz = (bz - az) / W;
-    const ix = dz * 7, iz = -dx * 7; // vers l'intérieur
-    const v = Math.max(1, Math.min(255, Math.round(t.y + alt0 + t.hGout - base0)));
+    const nx = -dz, nz = dx; // normale sortante
+    const pts = [px(ax + nx * de, az + nz * de), px(bx + nx * de, bz + nz * de), px(bx + nx * a2, bz + nz * a2), px(ax + nx * a2, az + nz * a2)];
+    ctx.beginPath();
+    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.fill();
+  };
+  for (const t of taches) {
+    const v = Math.max(2, Math.min(255, Math.round(t.y + alt0 + t.hGout - base0)));
     ctx.fillStyle = `rgb(${v},0,0)`;
-    ctx.beginPath();
-    const pts = [px(ax, az), px(bx, bz), px(bx + ix, bz + iz), px(ax + ix, az + iz)];
-    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.fill();
+    bande(t, -0.5, -2.5);
   }
-  // Bande de 1,2 m derrière chaque façade : ramenée au sol, pour que le LiDAR ne masque pas la façade générée.
   ctx.fillStyle = 'rgb(1,0,0)';
-  for (const t of taches) {
-    const [ax, az] = t.a, [bx, bz] = t.b;
-    const W = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / W, dz = (bz - az) / W;
-    const ix = dz * 1.2, iz = -dx * 1.2, ox = -dz * 0.6, oz = dx * 0.6;
-    ctx.beginPath();
-    const pts = [px(ax + ox, az + oz), px(bx + ox, bz + oz), px(bx + ix, bz + iz), px(ax + ix, az + iz)];
-    pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.fill();
-  }
+  for (const t of taches) bande(t, 0.7, -0.5);
   const d = ctx.getImageData(0, 0, n, n).data;
   for (let i = 0; i < n * n; i++) {
     const v = d[i * 4]!;
+    if (!v || d[i * 4 + 3]! < 250) continue;
+    const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
     if (v === 1) {
-      const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
       g.hauteurs[i] = solA({ x, y });
       g.classes[i] = 0;
-    } else if (v && g.classes[i] === 1) g.hauteurs[i] = Math.min(g.hauteurs[i]!, base0 + v - 0.4);
+    } else {
+      const gout = base0 + v;
+      if (g.hauteurs[i]! < gout) (g.hauteurs[i] = gout), (g.classes[i] = 1);
+    }
   }
 }
 
@@ -458,7 +491,7 @@ function construireLoin(m: Grille2) {
 const habillage = new Habillage(import.meta.env.BASE_URL + 'tex/');
 scene.add(habillage.groupe);
 
-function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couverture: number; detail: Grille2 }) {
+function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couverture: number; detail: Grille2 & { brut: Float32Array } }) {
   terrain = { bbox: m.bbox, n: m.n, mnt: m.mnt, nT: m.nT, couverture: m.couverture, surf: m.hauteurs };
   alt0 = solA(adresse!.l93);
   const { bbox } = m;
@@ -466,7 +499,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   for (const r of [relief, detail]) if (r) (r.geometry.dispose(), scene.remove(r));
   // Large zone à 1 m, creusée là où la zone de détail à 50 cm prend le relais.
   relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
-  const taches = tachesFacades(zD);
+  const taches = tachesFacades(m.detail);
+  (window as unknown as { __taches: unknown }).__taches = taches;
   abaisserSousFacades(m.detail, taches);
   detail = maillage(m.detail, bbox);
   scene.add(relief, detail);
@@ -921,7 +955,7 @@ majTrajet();
 majSoleil();
 
 // Diagnostic (tests automatisés)
-(window as unknown as { __lumen: unknown }).__lumen = { hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+(window as unknown as { __lumen: unknown }).__lumen = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
@@ -930,3 +964,18 @@ const plan2d = initPlan2D({ voir3D: (p) => studio?.depuisPlan2D(p) });
 studio = initStudio({ ouvrirPlan2D: () => plan2d.ouvrir() });
 $('monPlan').onclick = plan2d.ouvrir;
 $('studio3d').onclick = () => studio?.ouvrir();
+
+// Erreurs visibles (diagnostic sur téléphone)
+const toast = (t: string) => {
+  let e = document.getElementById('toastErreur');
+  if (!e) {
+    e = document.createElement('div');
+    e.id = 'toastErreur';
+    e.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 120px);z-index:9;padding:10px 12px;border-radius:12px;background:#b3261e;color:#fff;font-size:12px';
+    e.onclick = () => e!.remove();
+    document.body.append(e);
+  }
+  e.textContent = `Erreur : ${t}`;
+};
+addEventListener('error', (e) => toast(e.message));
+addEventListener('unhandledrejection', (e) => toast(String((e as PromiseRejectionEvent).reason)));

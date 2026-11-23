@@ -559,6 +559,8 @@ export function buildBuilding(T, M, o) {
   G.moul.push(extrudeX(T, moulure(T, cd, .55), W + .4, -.2, Htop - .12, 0));
   if (style !== 'modeste' && !G.lod) for (let x = .1; x < W; x += .19) G.moul.push(box(T, .09, .12, .14, x, Htop - .18, .1));
   G.zinc.push(box(T, W + .4, .14, .3, W / 2, Htop + .5, cd - .1, 1.6));
+  // toit généré : désactivé quand le vrai toit vient du LiDAR (o.sansToit)
+  if (!o.sansToit) {
   // toit : mansarde zinc (riche/classique) ou toit à 45° (modeste)
   const mh = style === 'modeste' ? 2.8 : 3.6, mb = style === 'modeste' ? 2.8 : 1.35, mt = 2.6;
   const ms = new T.Shape(); ms.moveTo(.35, 0); ms.lineTo(-mb + .35, mh); ms.lineTo(-mb - mt, mh + .9); ms.lineTo(-D + .2, mh + .9); ms.lineTo(-D + .2, 0); ms.closePath();
@@ -589,6 +591,7 @@ export function buildBuilding(T, M, o) {
     const ax = W * (.2 + R() * .6), az = -D * (.5 + R() * .3), ay = Htop + mh + .9;
     G.tube.push(new T.CylinderGeometry(.025, .03, 3.2, 6).translate(ax, ay + 1.6, az));
     for (let j = 0; j < 4; j++) G.tube.push(box(T, 1.4 - j * .2, .02, .02, ax, ay + 2.2 + j * .25, az));
+  }
   }
   // descentes d'eau : 1 à 3, matière propre à l'immeuble (zinc, fonte noire, peinte en vert ou ton façade)
   {

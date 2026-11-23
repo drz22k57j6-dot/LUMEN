@@ -108,17 +108,32 @@ async function charger(q: Extract<Requete, { type: 'charger' }>) {
   const o = Math.round((nS - nD) / 2);
   const hD = new Float32Array(nD * nD);
   const cD = new Uint8Array(nD * nD);
+  const bD = new Float32Array(nD * nD);
   for (let r = 0; r < nD; r++)
     for (let c = 0; c < nD; c++) {
       const i = (r + o) * nS + c + o;
       const k = classe[i]!;
       hD[r * nD + c] = masque[i] || k === 2 ? zS[i]! : solCell[i]!;
+      bD[r * nD + c] = zS[i]!;
       cD[r * nD + c] = masque[i] ? 1 : k === 2 ? 2 : 0;
     }
+  // Affichage : médiane 3×3 sur les toits (antennes et pics isolés du LiDAR ; le calcul garde la donnée brute).
+  {
+    const src = hD.slice(), v: number[] = [];
+    for (let r = 1; r < nD - 1; r++)
+      for (let c = 1; c < nD - 1; c++) {
+        const i = r * nD + c;
+        if (cD[i] !== 1) continue;
+        v.length = 0;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (cD[i + dr * nD + dc] === 1) v.push(src[i + dr * nD + dc]!);
+        v.sort((a, b) => a - b);
+        hD[i] = v[v.length >> 1]!;
+      }
+  }
   const bboxD = [bbox[0] + o * 0.5, bbox[3] - (o + nD) * 0.5, bbox[0] + (o + nD) * 0.5, bbox[3] - o * 0.5];
   post(
-    { type: 'pret', n, res: 1, bbox, hauteurs, classes, mnt: zT.slice(), nT, couverture: 1 - trous / (nS * nS), detail: { n: nD, bbox: bboxD, hauteurs: hD, classes: cD } },
-    [hauteurs.buffer, classes.buffer, hD.buffer, cD.buffer],
+    { type: 'pret', n, res: 1, bbox, hauteurs, classes, mnt: zT.slice(), nT, couverture: 1 - trous / (nS * nS), detail: { n: nD, bbox: bboxD, hauteurs: hD, classes: cD, brut: bD } },
+    [hauteurs.buffer, classes.buffer, hD.buffer, cD.buffer, bD.buffer],
   );
 
   // Zone lointaine : LiDAR à 8 m sur 2 km de rayon (silhouette de la ville, collines).

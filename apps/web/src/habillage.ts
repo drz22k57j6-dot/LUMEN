@@ -108,7 +108,8 @@ export class Habillage {
     const famille = t.style === 'modeste' ? 'enduit' : t.style === 'riche' ? 'riche' : 'pierre';
     const g = buildBuilding(THREE, this.kit, {
       width: W,
-      depth: 6.5,
+      depth: 2.6,
+      sansToit: true,
       seed: hachage(t.id),
       style: t.style,
       hGout: t.hGout,
