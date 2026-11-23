@@ -21,6 +21,7 @@ interface ProprietesBdTopo {
   altitude_minimale_sol: number | null;
   altitude_minimale_toit: number | null;
   precision_altimetrique: number | null;
+  cleabs?: string;
   nature: string | null;
   usage_1: string | null;
   nombre_de_logements: number | null;
@@ -52,7 +53,8 @@ export function versBatiment(e: EntiteBdTopo): Batiment | null {
     p.altitude_minimale_sol != null
       ? donnee(p.altitude_minimale_sol, 'mesure', 'IGN BD TOPO', prec)
       : donnee(0, 'genere', 'Lumen (altitude inconnue)');
-  const b: Batiment = { id: e.id, contour, hauteur, altitudeSol: sol };
+  // identifiant IGN stable (cleabs « BATIMENT… ») : l'id WFS est un numéro interne qui change d'une livraison à l'autre
+  const b: Batiment = { id: p.cleabs ?? e.id, contour, hauteur, altitudeSol: sol };
   if (p.nature) b.nature = p.nature;
   if (p.usage_1) b.usage = p.usage_1;
   if (p.nombre_de_logements != null) b.nbLogements = p.nombre_de_logements;

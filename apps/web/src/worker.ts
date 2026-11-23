@@ -1,5 +1,5 @@
 import { fromArrayBuffer } from 'geotiff';
-import { debutJourParis, type LonLat, type XY } from '@lumen/core';
+import { convergenceL93, debutJourParis, type LonLat, type XY } from '@lumen/core';
 import { altitude, ensoleillementAnnee, type Grille } from '@lumen/analysis';
 import { construireVoirie, COUCHES, urlWms, type Troncon } from '@lumen/urban';
 import type { Batiment } from '@lumen/core';
@@ -154,7 +154,8 @@ function calculer(q: Extract<Requete, { type: 'calculer' }>) {
   const t0 = performance.now();
   // Le contour cadastral et le LiDAR peuvent être décalés (corniches, recalage) : on avance chaque point
   // vers la rue jusqu'à sortir du volume mesuré de l'immeuble, pour ne pas compter son propre toit comme obstacle.
-  const az = (q.azimut * Math.PI) / 180, nx = Math.sin(az), ny = Math.cos(az);
+  // azimut vrai → direction dans la grille Lambert-93
+  const az = ((q.azimut + convergenceL93(q.lieu.lon)) * Math.PI) / 180, nx = Math.sin(az), ny = Math.cos(az);
   const points = q.points.map((o) => {
     for (let t = 0; t <= 3; t += 0.25) {
       const x = o.x + nx * t, y = o.y + ny * t;

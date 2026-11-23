@@ -39,13 +39,13 @@ export function catalogueMonuments(): Promise<Monument[]> {
 export const monumentsDans = (cat: Monument[], b: [number, number, number, number]) =>
   cat.filter((m) => m.x > b[0] && m.x < b[2] && m.y > b[1] && m.y < b[3]);
 
-/** Le bâtiment IGN est-il remplacé par un monument ? (identifiant WFS « batiment.BATIMENT… ») */
-export const remplace = (ms: Monument[], b: Batiment) => ms.some((m) => m.ids.some((id) => b.id.endsWith(id)));
+/** Le bâtiment IGN (cleabs) est-il remplacé par un monument ? */
+export const remplace = (ms: Monument[], b: Batiment) => ms.some((m) => m.ids.some((id) => b.id === id));
 
 /** Test « dans l'emprise d'un monument » : emprises IGN remplacées, sinon disque de rayon_m. */
 export function emprisesMonuments(ms: Monument[], batiments: Batiment[]): (p: XY) => boolean {
   const zones = ms.map((m) => {
-    const bats = batiments.filter((b) => m.ids.some((id) => b.id.endsWith(id)));
+    const bats = batiments.filter((b) => m.ids.some((id) => b.id === id));
     const r = m.rayon_m + 3;
     return { m, bats, r };
   });
@@ -97,4 +97,44 @@ export function libererMonuments(g: THREE.Group) {
       }
     }
   });
+}
+
+/**
+ * Empreinte au sol réelle des modèles chargés (triangles projetés, grille de 1 m, marge de 1 m),
+ * dans le repère de la scène. Sert à aplanir le relief LiDAR, qui contient déjà l'édifice.
+ */
+export function empreinteModeles(g: THREE.Group, pas = 1): (x: number, z: number) => boolean {
+  const cases = new Set<number>();
+  const cle = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  g.updateMatrixWorld(true);
+  g.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const pos = o.geometry.attributes.position as THREE.BufferAttribute, idx = o.geometry.index;
+    const n = idx ? idx.count : pos.count;
+    for (let t = 0; t + 2 < n; t += 3) {
+      a.fromBufferAttribute(pos, idx ? idx.getX(t) : t).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(pos, idx ? idx.getX(t + 1) : t + 1).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(pos, idx ? idx.getX(t + 2) : t + 2).applyMatrix4(o.matrixWorld);
+      const i0 = Math.floor(Math.min(a.x, b.x, c.x) / pas), i1 = Math.floor(Math.max(a.x, b.x, c.x) / pas);
+      const j0 = Math.floor(Math.min(a.z, b.z, c.z) / pas), j1 = Math.floor(Math.max(a.z, b.z, c.z) / pas);
+      const ar = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+      if (Math.abs(ar) < 1e-9 || (i0 === i1 && j0 === j1)) {
+        cases.add(cle(i0, j0));
+        continue;
+      }
+      for (let i = i0; i <= i1; i++)
+        for (let j = j0; j <= j1; j++) {
+          const px = (i + 0.5) * pas, pz = (j + 0.5) * pas;
+          const w0 = ((b.x - px) * (c.z - pz) - (b.z - pz) * (c.x - px)) / ar;
+          const w1 = ((c.x - px) * (a.z - pz) - (c.z - pz) * (a.x - px)) / ar;
+          if (w0 >= -0.3 && w1 >= -0.3 && 1 - w0 - w1 >= -0.3) cases.add(cle(i, j));
+        }
+    }
+  });
+  return (x, z) => {
+    const i = Math.floor(x / pas), j = Math.floor(z / pas);
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) if (cases.has(cle(i + di, j + dj))) return true;
+    return false;
+  };
 }

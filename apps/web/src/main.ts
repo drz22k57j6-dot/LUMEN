@@ -3,11 +3,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh';
-import { azimutDe, utcDepuisParis, versWgs84, type Adresse, type Batiment, type XY } from '@lumen/core';
-import { Code, directionSoleil, positionSoleil } from '@lumen/analysis';
+import { azimutDe, azimutVrai, utcDepuisParis, versWgs84, type Adresse, type Batiment, type XY } from '@lumen/core';
+import { Code, directionSoleil, eclairement, positionSoleil } from '@lumen/analysis';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie } from './voirie3d';
-import { catalogueMonuments, chargerMonuments, emprisesMonuments, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
+import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
@@ -35,7 +36,7 @@ renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
 // Éclairage d'ambiance réaliste (reflets du zinc, des vitres et de la pierre).
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.45;
+scene.environmentIntensity = 0.3;
 scene.fog = new THREE.Fog(0x9cc4ef, 1200, 4800);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 9000);
 camera.position.set(260, 320, 380);
@@ -54,6 +55,22 @@ Object.assign(soleil.shadow.camera, { left: -330, right: 330, top: 330, bottom: 
 soleil.shadow.bias = -0.0003;
 soleil.shadow.normalBias = 0.8;
 scene.add(hemi, soleil, soleil.target);
+
+// Ciel physique (diffusion Rayleigh + Mie, modèle de Preetham) ; disque solaire à sa taille réelle (0,53°).
+const ciel = new Sky();
+ciel.scale.setScalar(8000);
+{
+  const U = ciel.material.uniforms;
+  U.turbidity!.value = 2.8; // ciel clair urbain, cohérent avec les aérosols de eclairement()
+  U.rayleigh!.value = 1;
+  U.mieCoefficient!.value = 0.005;
+  U.mieDirectionalG!.value = 0.8;
+  U.uEchelle = { value: 0.48 };
+  ciel.material.fragmentShader = 'uniform float uEchelle;\n' + ciel.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uEchelle, 1.0 );');
+}
+scene.add(ciel);
+/** Intensité three.js par lux : 100 000 lx de soleil → 3,2. Ratios direct / diffus / sol réels. */
+const PAR_LUX = 3.2 / 100_000;
 
 const fondSol = new THREE.Mesh(new THREE.CircleGeometry(4000, 64), new THREE.MeshLambertMaterial({ color: 0x6f6a62 }));
 fondSol.rotation.x = -Math.PI / 2;
@@ -115,7 +132,7 @@ scene.add(overlay);
 
 // Trajectoire du soleil
 const trajet = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffd257, dashSize: 6, gapSize: 4, transparent: true, opacity: 0.8, fog: false }));
-const disque = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffe08a, fog: false }));
+const disque = new THREE.Mesh(new THREE.SphereGeometry(420 * Math.tan(THREE.MathUtils.degToRad(0.2665)), 24, 16), new THREE.MeshBasicMaterial({ color: 0xffe08a, fog: false }));
 scene.add(trajet, disque);
 
 function redim() {
@@ -232,13 +249,24 @@ function majSoleil() {
   soleil.position.set(c.x + x * 900, c.y + y * 900, c.z + z * 900);
   soleil.target.position.copy(c);
   soleil.target.updateMatrixWorld();
-  const f = THREE.MathUtils.clamp(s.elevation / 12, 0, 1);
-  soleil.intensity = s.elevation > -0.5 ? 0.3 + 2.9 * f : 0;
-  soleil.color.setHSL(0.1, 0.9, 0.62 + 0.28 * f);
-  hemi.intensity = 0.15 + 0.75 * f;
-  const ciel = new THREE.Color().lerpColors(new THREE.Color(0x141b2d), new THREE.Color(0x9cc4ef), Math.max(0, Math.min(1, (s.elevation + 6) / 18)));
-  scene.background = ciel;
-  scene.fog!.color.copy(ciel);
+  // Lumière calculée à travers l'atmosphère (packages/analysis/lumiere.ts), aucun réglage à l'œil.
+  const E = eclairement(s.elevation);
+  const lin = THREE.LinearSRGBColorSpace;
+  soleil.intensity = PAR_LUX * E.directNormal;
+  soleil.color.setRGB(...E.couleurSoleil, lin);
+  hemi.intensity = PAR_LUX * E.diffusHorizontal;
+  hemi.color.setRGB(...E.couleurCiel, lin);
+  const sol = (0.18 * E.globalHorizontal) / Math.max(E.diffusHorizontal, 1e-6); // albédo urbain 0,18
+  hemi.groundColor.setRGB(0.9 * sol, 0.85 * sol, 0.78 * sol, lin);
+  scene.environmentIntensity = 0.3 * (E.diffusHorizontal / 16_700);
+  // Exposition automatique, comme un appareil photo (limitée : la nuit reste la nuit).
+  const expo = THREE.MathUtils.clamp(Math.sqrt(100_000 / Math.max(E.globalHorizontal, 1e-3)), 1, 16);
+  renderer.toneMappingExposure = 1.05 * expo;
+  ciel.material.uniforms.sunPosition!.value.set(x, y, z);
+  const brume = 0.86 * Math.min(1.2, (E.diffusHorizontal * expo) / 16_700);
+  scene.fog!.color.setRGB(E.couleurCiel[0] * brume, E.couleurCiel[1] * brume, E.couleurCiel[2] * brume, lin);
+  scene.background = null;
+  (disque.material as THREE.MeshBasicMaterial).color.setRGB(...E.couleurSoleil, lin);
   disque.position.set(x * 420, y * 420, z * 420);
   disque.visible = s.elevation > -1 && !vueFenetre;
   const centreCiel = vueRue ? camera.position : new THREE.Vector3();
@@ -586,6 +614,20 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
       if (adresse !== ici) return libererMonuments(g);
       groupeMonuments = g;
       scene.add(g);
+      // relief LiDAR ramené au sol sous l'empreinte réelle des modèles (portiques, marches, colonnes compris)
+      const sous = empreinteModeles(g);
+      for (const r of [relief, detail]) {
+        if (!r) continue;
+        const pos = r.geometry.attributes.position as THREE.BufferAttribute;
+        let modifie = false;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), z = pos.getZ(i);
+          if (!sous(x, z)) continue;
+          const sol = solA({ x: x + adresse!.l93.x, y: -z + adresse!.l93.y }) - alt0;
+          if (pos.getY(i) > sol) (pos.setY(i, sol), (modifie = true));
+        }
+        if (modifie) (pos.needsUpdate = true), r.geometry.computeVertexNormals();
+      }
     });
   }
 
@@ -670,7 +712,7 @@ function choisir(p: XY) {
   if (!ar) return;
   selBat = bat;
   const mil = { x: ar.a.x + (ar.b.x - ar.a.x) * ar.t, y: ar.a.y + (ar.b.y - ar.a.y) * ar.t };
-  facade = { a: ar.a, b: ar.b, normale: ar.nrm, azimut: azimutDe(ar.nrm.x, ar.nrm.y), point: mil };
+  facade = { a: ar.a, b: ar.b, normale: ar.nrm, azimut: azimutVrai(azimutDe(ar.nrm.x, ar.nrm.y), adresse!.position.lon), point: mil };
   const etagesMax = Math.max(0, Math.floor(bat.hauteur.valeur / +$<HTMLSelectElement>('hEtage').value) - 1);
   etage = Math.min(etage, etagesMax);
   majSelection();
@@ -987,6 +1029,7 @@ controls.addEventListener('start', () => (interaction = true));
 controls.addEventListener('end', () => (interaction = false));
 let dureeHab = 0;
 renderer.setAnimationLoop((t) => {
+  ciel.position.copy(camera.position);
   if (document.body.classList.contains('studio')) return; // le Studio 3D a son propre rendu
   const dt = Math.min(0.1, (t - avant) / 1000);
   avant = t;

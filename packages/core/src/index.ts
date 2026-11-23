@@ -79,6 +79,15 @@ export class RepereLocal {
 /** Azimut (degrés depuis le nord, horaire) d'un vecteur Lambert-93 (dx est, dy nord). */
 export const azimutDe = (dx: number, dy: number): number => ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
 
+/**
+ * Convergence des méridiens en Lambert-93 (degrés) : cap, dans la grille, du nord géographique.
+ * 0,47° à Paris, 1,26° à Limoges, −1,72° à Marseille. γ = −n (λ − 3°), n = 0,7256077650.
+ */
+export const convergenceL93 = (lon: number): number => -0.725607765 * (lon - 3);
+
+/** Azimut vrai (depuis le nord géographique) d'une direction mesurée dans la grille Lambert-93. */
+export const azimutVrai = (azimutGrille: number, lon: number): number => (((azimutGrille - convergenceL93(lon)) % 360) + 360) % 360;
+
 // --- Heure de Paris -----------------------------------------------------
 const fmtParis = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/Paris', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',

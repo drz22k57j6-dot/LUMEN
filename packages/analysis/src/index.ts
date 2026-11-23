@@ -1,5 +1,5 @@
 import * as Astronomy from 'astronomy-engine';
-import type { LonLat } from '@lumen/core';
+import { convergenceL93, type LonLat } from '@lumen/core';
 
 /**
  * Position apparente du soleil (éphémérides VSOP87 d'astronomy-engine, précision < 1"),
@@ -10,18 +10,23 @@ export interface PositionSoleil {
   azimut: number;
   /** Degrés au-dessus de l'horizon (réfraction incluse). */
   elevation: number;
+  /** Convergence Lambert-93 du lieu (degrés), pour orienter la scène et la grille LiDAR. */
+  convergence?: number;
 }
 
 export function positionSoleil(date: Date, lieu: LonLat, altitude = 0): PositionSoleil {
   const obs = new Astronomy.Observer(lieu.lat, lieu.lon, altitude);
   const eq = Astronomy.Equator(Astronomy.Body.Sun, date, obs, true, true);
   const hor = Astronomy.Horizon(date, obs, eq.ra, eq.dec, 'normal');
-  return { azimut: hor.azimuth, elevation: hor.altitude };
+  return { azimut: hor.azimuth, elevation: hor.altitude, convergence: convergenceL93(lieu.lon) };
 }
 
-/** Vecteur unitaire vers le soleil, dans le repère local (x = est, y = haut, z = sud). */
-export function directionSoleil({ azimut, elevation }: PositionSoleil): [number, number, number] {
-  const a = (azimut * Math.PI) / 180;
+/**
+ * Vecteur unitaire vers le soleil, dans le repère local Lambert-93 (x = est grille, y = haut, z = sud grille).
+ * L'azimut vrai est tourné de la convergence des méridiens : sans cela les ombres pivotent de 0,5 à 1,7°.
+ */
+export function directionSoleil({ azimut, elevation, convergence = 0 }: PositionSoleil): [number, number, number] {
+  const a = ((azimut + convergence) * Math.PI) / 180;
   const e = (elevation * Math.PI) / 180;
   return [Math.cos(e) * Math.sin(a), Math.sin(e), -Math.cos(e) * Math.cos(a)];
 }
@@ -150,3 +155,4 @@ export function ensoleillementPieceAnnuel(p: ParamsPiece): ResultatJour[] {
 }
 
 export * from './grille';
+export * from './lumiere';
