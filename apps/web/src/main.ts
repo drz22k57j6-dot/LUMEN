@@ -1072,7 +1072,10 @@ $('studio3d').onclick = () => studio?.ouvrir();
 if (import.meta.env.VITE_MODE_DEV === '1')
   void import('./dev/panneau').then((m) =>
     m.installerModeDev({
-      scene, camera, renderer, controls, charger: (a) => charger(a),
+      scene, camera, renderer, controls,
+      // Ouvre directement le monde 3D (en sautant la carte 2D d'accueil)
+      charger: (a) => { document.body.classList.remove('mode-carte'); carte.montrer(false); $('accueil').hidden = true; $('etapeCarte').hidden = true; redim(); return charger(a); },
+      carte2D: () => retourCarte(),
       ouvrirStudio: () => studio?.ouvrir(), ouvrirPlan: () => plan2d.ouvrir(),
       etat: () => ({ adresse: adresse?.label, batiments: batiments.length, troncons: troncons.length, monuments: monuments.length, etage, selection: selBat?.id ?? null, facade: facade?.azimut ?? null }),
       diagnostic,
