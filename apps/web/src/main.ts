@@ -102,14 +102,18 @@ function creerMatRelief() {
 const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.3 });
 matRelief.onBeforeCompile = (s) => {
   s.uniforms.uPhoto = uniformes.uPhoto;
+  s.vertexShader = s.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float aBati;\nvarying float vBati;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBati = aBati;');
   s.fragmentShader = s.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uPhoto;')
+    .replace('#include <common>', '#include <common>\nuniform float uPhoto;\nvarying float vBati;')
     .replace('#include <map_fragment>', '#ifdef USE_MAP\n vec3 photo = texture2D(map, vMapUv).rgb;\n#else\n vec3 photo = vec3(1.0);\n#endif')
     .replace('#include <color_fragment>', '')
     .replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
        float haut = inverseTransformDirection(normal, viewMatrix).y;
+       if (vBati > 0.02 && haut < 0.6) discard;
        vec3 dessus = mix(vColor * 1.08, photo, uPhoto);
        diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));`,
     );
@@ -556,7 +560,7 @@ async function charger(a: Adresse) {
 type Grille2 = { n: number; bbox: Terrain['bbox']; hauteurs: Float32Array; classes: Uint8Array };
 
 /** Maillage d'une grille d'altitudes (sommets aux centres des cellules), UV sur l'orthophoto globale. */
-function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y: number) => boolean, mat = matRelief) {
+function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y: number) => boolean, mat = matRelief, mursIgn = false) {
   const { n, bbox, hauteurs, classes } = g;
   const taille = bbox[2] - bbox[0], tO = bboxOrtho[2] - bboxOrtho[0];
   const geo = new THREE.PlaneGeometry(taille - taille / n, taille - taille / n, n - 1, n - 1);
@@ -575,6 +579,11 @@ function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y:
     teintes[classes[i]!]!.toArray(col, i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // 1 = bâti LiDAR dont les murs sont dessinés par les murs IGN : ses pans raides (le « rideau » tendu du toit
+  // jusqu'à la rue, en grands triangles blancs) ne sont pas affichés.
+  const bati = new Float32Array(n * n);
+  if (mursIgn) for (let i = 0; i < n * n; i++) bati[i] = classes[i] === 1 ? 1 : 0;
+  geo.setAttribute('aBati', new THREE.BufferAttribute(bati, 1));
   geo.computeVertexNormals();
   geo.computeBoundsTree();
   const m = new THREE.Mesh(geo, mat);
@@ -688,17 +697,17 @@ function abaisserSousFacades(g: Grille2, taches: TacheFacade[]) {
 
 /** Le LiDAR « bâtiment » hors des emprises IGN (élargies de 1 m) est ramené au sol :
  *  supprime les rideaux en dents de scie (marches du raster 50 cm) le long des murs. */
-function nettoyerBords(g: Grille2) {
-  const { n, bbox } = g;
+function nettoyerBords(g: Grille2, marge = 1) {
+  const { n, bbox } = g, res = (bbox[2] - bbox[0]) / n;
   const cv = document.createElement('canvas');
   cv.width = cv.height = n;
   const ctx = cv.getContext('2d', { willReadFrequently: true })!;
   ctx.fillStyle = ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2; // 1 m de marge autour de chaque emprise
+  ctx.lineWidth = (2 * marge) / res; // marge autour de chaque emprise
   ctx.lineJoin = 'round';
   for (const b of batiments) {
     ctx.beginPath();
-    b.contour.forEach((p, k) => { const x = (p.x - bbox[0]) / 0.5, y = (bbox[3] - p.y) / 0.5; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+    b.contour.forEach((p, k) => { const x = (p.x - bbox[0]) / res, y = (bbox[3] - p.y) / res; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -706,7 +715,7 @@ function nettoyerBords(g: Grille2) {
   const d = ctx.getImageData(0, 0, n, n).data;
   for (let i = 0; i < n * n; i++) {
     if (g.classes[i] !== 1 || d[i * 4 + 3]! > 0) continue;
-    const x = bbox[0] + ((i % n) + 0.5) * 0.5, y = bbox[3] - (Math.floor(i / n) + 0.5) * 0.5;
+    const x = bbox[0] + ((i % n) + 0.5) * res, y = bbox[3] - (Math.floor(i / n) + 0.5) * res;
     g.hauteurs[i] = solA({ x, y });
     g.classes[i] = 0;
   }
@@ -783,8 +792,21 @@ async function poserPlaques(taches: TacheFacade[], zD: Terrain['bbox']) {
   plaques = creerPlaques({ adresses: adr, troncons, pans, local, centre: a.l93, rayon: RAYON, aniso: renderer.capabilities.getMaxAnisotropy() });
   scene.add(plaques);
 }
-let loin: THREE.Mesh | null = null;
+/** Contour rentré de d mètres (décalage le long des bissectrices). */
+function rentrer(contour: XY[], d: number): XY[] {
+  const aire = contour.reduce((s2, p, i) => { const q = contour[(i + 1) % contour.length]!; return s2 + p.x * q.y - q.x * p.y; }, 0);
+  const c = aire < 0 ? [...contour].reverse() : contour, n = c.length;
+  const unit = (x: number, y: number) => { const l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; };
+  return c.map((p, i) => {
+    const a = c[(i - 1 + n) % n]!, b = c[(i + 1) % n]!;
+    const e1 = unit(p.x - a.x, p.y - a.y), e2 = unit(b.x - p.x, b.y - p.y);
+    const bi = unit(-e1.y - e2.y, e1.x + e2.x); // intérieur à gauche (contour antihoraire)
+    const cos = Math.max(0.35, bi.x * -e1.y + bi.y * e1.x);
+    return { x: p.x + (bi.x * d) / cos, y: p.y + (bi.y * d) / cos };
+  });
+}
 
+let loin: THREE.Mesh | null = null;
 /** Zone lointaine (2 km) : LiDAR à 8 m + orthophoto, creusée sous la zone à 1 m. */
 function construireLoin(m: Grille2) {
   if (!terrain || !adresse) return;
@@ -823,12 +845,13 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   aplanirVegetation(m);
   aplanirVegetation(m.detail);
   planterArbres(bbox);
-  relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
+  nettoyerBords(m, 1.5);
+  relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1, matRelief, true);
   const taches = tachesFacades(m.detail);
   (window as unknown as { __taches: unknown }).__taches = taches;
   abaisserSousFacades(m.detail, taches);
   nettoyerBords(m.detail);
-  detail = maillage(m.detail, bbox);
+  detail = maillage(m.detail, bbox, undefined, matRelief, true);
   scene.add(relief, detail);
   habillage.lancer(taches);
   void poserPlaques(taches, zD);
@@ -839,10 +862,13 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   for (const b of batiments) {
     if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5 || remplace(monuments, b)) continue;
-    if (b.contour.every((p) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3])) continue; // zone de détail : LiDAR 50 cm + façades générées
+    // Zone de détail : les façades générées sont posées sur la vraie ligne du mur ; les murs IGN, rentrés de 0,8 m,
+    // ferment les côtés non habillés (cours, pignons, façades pas encore générées) au lieu du rideau LiDAR.
+    const enDetail = b.contour.every((p) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3]);
     const cx = b.contour.reduce((s, p) => s + p.x, 0) / b.contour.length, cy = b.contour.reduce((s, p) => s + p.y, 0) / b.contour.length;
     const base = solA({ x: cx, y: cy });
-    const forme = new THREE.Shape(b.contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
+    const contour = enDetail ? rentrer(b.contour, 0.8) : b.contour;
+    const forme = new THREE.Shape(contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
     const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, b.altitudeSol.valeur + b.hauteur.valeur - base - 0.6), bevelEnabled: false });
     // v des murs = hauteur depuis le sol (m)
     const uvA = g.attributes.uv as THREE.BufferAttribute, posA = g.attributes.position as THREE.BufferAttribute;
