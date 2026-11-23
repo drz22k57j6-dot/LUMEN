@@ -662,18 +662,21 @@ function afficherForet(liste: Arbre[]) {
   foret.majSaison(dateCourante());
   scene.add(foret.groupe);
 }
-function planterArbres(couronnes: { p: XY; hauteur: number; rayon: number }[], bbox: Terrain['bbox']) {
+/** Arbres : uniquement l'inventaire officiel de la ville (position, espèce, hauteur), sans le LiDAR,
+ *  dont les « couronnes » détectées tombaient parfois sur des toits ou des bâtiments. */
+function planterArbres(_couronnes: unknown, bbox: Terrain['bbox']) {
   const dedans = (p: XY) => p.x > bbox[0] + 2 && p.x < bbox[2] - 2 && p.y > bbox[1] + 2 && p.y < bbox[3] - 2;
-  afficherForet(fusionner([], couronnes, dedans));
-  // Paris : inventaire officiel (espèce, hauteur) recalé sur le LiDAR
+  afficherForet([]);
   const a = adresse!, { lon, lat } = a.position;
-  if (lon < 2.2 || lon > 2.48 || lat < 48.8 || lat > 48.92) return;
+  if (lon < 2.2 || lon > 2.48 || lat < 48.8 || lat > 48.92) return; // inventaire disponible : Paris
   fetch(urlArbresParis(lon, lat, RAYON * 1.2))
     .then((r) => (r.ok ? r.json() : []))
     .then((liste: ArbreParis[]) => {
       if (adresse !== a) return;
-      const inv = liste.map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la }))).filter((x): x is Arbre => !!x && dedans(x.p));
-      afficherForet(fusionner(inv, couronnes, dedans));
+      const inv = liste
+        .map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la })))
+        .filter((x): x is Arbre => !!x && dedans(x.p) && !batiments.some((b) => contient(b.contour, x.p)));
+      afficherForet(inv);
     })
     .catch(() => undefined);
 }
@@ -716,7 +719,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   // Arbres : couronnes mesurées dans le LiDAR (sommet, hauteur, rayon), puis le LiDAR végétation est ramené au sol
   // (les arbres 3D, à feuillage saisonnier, le remplacent). L'inventaire de Paris ajoute l'espèce.
   const dansD = (p: XY) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3];
-  const couronnes = [...couronnesDe(m.detail), ...couronnesDe(m, dansD)];
+  const couronnes = null;
+  void dansD;
   aplanirVegetation(m);
   aplanirVegetation(m.detail);
   planterArbres(couronnes, bbox);
