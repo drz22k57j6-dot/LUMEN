@@ -10,6 +10,7 @@ import { chargerMeteo, etatA, type GrilleMeteo } from './ciel/meteo';
 import { Nuages, transmission } from './ciel/nuages';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
+import { creerSolUrbain, orthoSol } from './sol3d';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -161,6 +162,7 @@ let alt0 = 0;
 let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
+let solUrbain: THREE.Mesh | null = null;
 let monuments: Monument[] = [];
 let groupeMonuments: THREE.Group | null = null;
 let terrain: Terrain | null = null;
@@ -197,22 +199,36 @@ function construireVoirie3D(v: Voirie) {
   if (voirie) (libererVoirie(voirie), scene.remove(voirie));
   voirie = creerVoirie3D(v, (p, dz) => local(p, solB(p) + dz), mobile);
   scene.add(voirie);
-  // Le relief LiDAR (MNS) contient voitures, mobilier, bas des arbres : sous la voirie on le passe
-  // 15 cm sous le sol (MNT), pour que rien ne traverse la chaussée ni les trottoirs.
+  // Le relief LiDAR (MNS) contient voitures, mobilier, bas des arbres : partout hors bâtiments on le passe
+  // 15 cm sous le terrain nu (MNT). La voirie et le sol urbain (places, cours, parcs) le recouvrent.
   if (!terrain) return;
   const dans = masqueVoirie(v, terrain.bbox);
+  const T = terrain;
+  const classe = (p: XY) => {
+    const i = Math.floor(p.x - T.bbox[0]), j = Math.floor(T.bbox[3] - p.y);
+    return i < 0 || j < 0 || i >= T.n || j >= T.n ? 0 : T.classes[j * T.n + i]!;
+  };
   for (const r of [relief, detail]) {
     if (!r) continue;
     const pos = r.geometry.attributes.position as THREE.BufferAttribute;
     let modifie = false;
     for (let i = 0; i < pos.count; i++) {
       const p = { x: pos.getX(i) + adresse!.l93.x, y: -pos.getZ(i) + adresse!.l93.y };
-      if (!dans(p)) continue;
+      if (!dans(p) && classe(p) === 1) continue;
       const sol = solB(p) - alt0 - 0.15;
       if (pos.getY(i) > sol) (pos.setY(i, sol), (modifie = true));
     }
     if (modifie) (pos.needsUpdate = true), r.geometry.computeVertexNormals();
   }
+  if (solUrbain) (scene.remove(solUrbain), solUrbain.geometry.dispose(), (solUrbain.material as THREE.Material).dispose());
+  solUrbain = creerSolUrbain({
+    bbox: T.bbox,
+    centre: adresse!.l93,
+    garder: (p) => classe(p) !== 1, // passe aussi sous la voirie : aucun jour entre trottoir et place
+    vers3: (p, dz) => local(p, solB(p) + dz),
+    mobile,
+  });
+  scene.add(solUrbain);
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -784,6 +800,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
       t.needsUpdate = true;
       matRelief.map?.dispose();
       matRelief.map = t;
+      orthoSol(t);
       matRelief.needsUpdate = true;
     })
     .catch(() => {})
