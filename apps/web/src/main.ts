@@ -13,6 +13,7 @@ import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { creerSolUrbain, orthoSol } from './sol3d';
 import { adressesAutour, creerPlaques, type AdresseBan, type PanFacade } from './plaques';
 import { creerHerbe, masqueHerbe, type Herbe } from './herbe';
+import { carteLumiere, creerLampadaires, equiperScene, lampesAllumees, lampesGenerees, lampesParis, partFenetres, U as UN, type Lampe } from './nuit';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -41,6 +42,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
+(window as unknown as { __scene: THREE.Scene }).__scene = scene; // inspection (tests de rendu)
 // Éclairage d'ambiance réaliste (reflets du zinc, des vitres et de la pierre).
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.3;
@@ -73,7 +75,12 @@ ciel.scale.setScalar(8000);
   U.mieCoefficient!.value = 0.005;
   U.mieDirectionalG!.value = 0.8;
   U.uEchelle = { value: 0.48 };
-  ciel.material.fragmentShader = 'uniform float uEchelle;\n' + ciel.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uEchelle, 1.0 );');
+  U.uHalo = { value: new THREE.Color(0, 0, 0) };
+  ciel.material.fragmentShader = 'uniform float uEchelle; uniform vec3 uHalo;\n' + ciel.material.fragmentShader.replace(
+    'gl_FragColor = vec4( retColor, 1.0 );',
+    // halo lumineux urbain : plus fort vers l'horizon
+    'gl_FragColor = vec4( retColor * uEchelle + uHalo * (0.35 + 0.65 * pow(1.0 - max(direction.y, 0.0), 4.0)), 1.0 );',
+  );
 }
 scene.add(ciel);
 // Nuages volumétriques pilotés par la météo réelle (ou simulée hors période couverte).
@@ -166,6 +173,8 @@ let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
 let solUrbain: THREE.Mesh | null = null;
 let herbe: Herbe | null = null;
+let lampesData: Lampe[] | null = null;
+let lampadaires: ReturnType<typeof creerLampadaires> | null = null;
 let orthoProche: ImageBitmap | null = null;
 let garderHerbe: ((p: XY) => boolean) | null = null;
 
@@ -246,6 +255,37 @@ function construireVoirie3D(v: Voirie) {
   scene.add(solUrbain);
   garderHerbe = (p) => !dans(p) && classe(p) !== 1;
   tenterHerbe();
+  voirieCourante = v;
+  construireNuit(v);
+}
+
+let voirieCourante: Voirie | null = null;
+/** Lampadaires (Ville de Paris, sinon générés le long des trottoirs) + carte d'éclairement. */
+function construireNuit(v: Voirie) {
+  if (!terrain || !adresse || lampesData === null) return;
+  if (lampadaires) (scene.remove(lampadaires.groupe), lampadaires.groupe.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
+  const lampes = lampesData.length ? lampesData : lampesGenerees(v.bordures);
+  const axes = troncons.filter((t) => !t.pieton).map((t) => t.axe);
+  const versRue = (p: XY): XY => {
+    let best = p, dm = Infinity;
+    for (const a of axes)
+      for (let i = 0; i < a.length - 1; i++) {
+        const A = a[i]!, B = a[i + 1]!, dx = B.x - A.x, dy = B.y - A.y, l2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((p.x - A.x) * dx + (p.y - A.y) * dy) / l2));
+        const q = { x: A.x + dx * t, y: A.y + dy * t }, d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+        if (d < dm) (dm = d), (best = q);
+      }
+    return best;
+  };
+  lampadaires = creerLampadaires(lampes, (p, dz) => local(p, solB(p) + dz), versRue);
+  scene.add(lampadaires.groupe);
+  equiperScene(scene);
+  UN.uLu.value?.dispose();
+  UN.uLu.value = carteLumiere(lampes, terrain.bbox, solB, alt0);
+  UN.uLuBbox.value.set(...terrain.bbox);
+  UN.uLuOrig.value.set(adresse.l93.x, adresse.l93.y);
+  $('lampesTxt').textContent = lampesData.length ? ` · ${lampes.length} lampadaires réels` : ` · ${lampes.length} lampadaires générés (données Ville de Paris indisponibles)`;
+  majSoleil();
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -328,15 +368,33 @@ function majSoleil() {
   }
   soleil.intensity = PAR_LUX * E.directNormal * tr.direct;
   soleil.color.setRGB(...E.couleurSoleil, lin);
-  hemi.intensity = PAR_LUX * E.diffusHorizontal * tr.diffus;
+  // halo lumineux urbain de Paris (≈ 0,4 lx diffus la nuit, teinte chaude) : la nuit n'est jamais noire en ville
+  const halo = Math.max(0, 0.4 - E.diffusHorizontal * tr.diffus);
+  hemi.intensity = PAR_LUX * (E.diffusHorizontal * tr.diffus + halo);
   hemi.color.setRGB(...E.couleurCiel, lin);
+  if (halo > 0.2) hemi.color.lerp(new THREE.Color(0.85, 0.72, 0.6), halo / 0.4);
   const sol = (0.18 * E.globalHorizontal) / Math.max(E.diffusHorizontal, 1e-6); // albédo urbain 0,18
   hemi.groundColor.setRGB(0.9 * sol, 0.85 * sol, 0.78 * sol, lin);
   scene.environmentIntensity = 0.3 * (E.diffusHorizontal / 16_700) * tr.diffus;
   // Exposition automatique, comme un appareil photo (limitée : la nuit reste la nuit).
   const globalReel = E.directNormal * tr.direct * Math.max(0, Math.sin((s.elevation * Math.PI) / 180)) + E.diffusHorizontal * tr.diffus;
-  const expo = THREE.MathUtils.clamp(Math.sqrt(100_000 / Math.max(globalReel, 1e-3)), 1, 16);
+  // adaptation de l'œil : forte la nuit (l'œil voit une rue éclairée à 10–30 lx), plafonnée
+  const expo = THREE.MathUtils.clamp(Math.pow(100_000 / Math.max(globalReel + halo, 1e-3), 0.75), 1, 6000);
+  // Nuit urbaine : fenêtres allumées (modèle horaire) et lampadaires (allumage astronomique)
+  {
+    const [an, mo, jo] = jour.value.split('-').map(Number) as [number, number, number];
+    UN.uFrac.value = partFenetres(+heure.value / 60, new Date(an, mo - 1, jo).getDay(), s.elevation);
+    UN.uLuxInt.value = (PAR_LUX * 35) / Math.PI; // pièce éclairée vue de la rue ≈ 35 lx (teinte chaude conservée)
+    const on = lampesAllumees(s.elevation);
+    UN.uLuOn.value = on ? 1 : 0;
+    UN.uPar.value = PAR_LUX;
+    lampadaires?.allumer(on, expo);
+  }
   renderer.toneMappingExposure = 1.05 * expo;
+  // le ciel de Preetham n'a pas de nuit : on garde sa luminance de crépuscule et on ajoute le halo orangé de Paris
+  ciel.material.uniforms.uEchelle!.value = 0.48 * Math.min(1, 16 / expo) * THREE.MathUtils.smoothstep(s.elevation, -12, -4);
+  try { habillage.nuit(expo); } catch { /* habillage pas encore créé au tout premier appel */ }
+  ciel.material.uniforms.uHalo!.value.setRGB(0.9, 0.6, 0.38).multiplyScalar((PAR_LUX * 0.25 * halo) / 0.4); // ≈ 0,25 cd/m² perçus à l'horizon
   ciel.material.uniforms.sunPosition!.value.set(x, y, z);
   const brume = 0.86 * Math.min(1.2, (E.diffusHorizontal * expo) / 16_700);
   scene.fog!.color.setRGB(E.couleurCiel[0] * brume, E.couleurCiel[1] * brume, E.couleurCiel[2] * brume, lin);
@@ -482,6 +540,11 @@ async function charger(a: Adresse) {
       tronconsAutour(a.position, RAYON + 40).catch(() => [] as Troncon[]), // la voirie est un plus : jamais bloquante
       catalogueMonuments(),
     ]);
+    lampesData = null;
+    lampesParis(a.position, RAYON + 30)
+      .then((l) => (lampesData = l))
+      .catch(() => (lampesData = []))
+      .finally(() => voirieCourante && construireNuit(voirieCourante));
     monuments = monumentsDans(cat, [a.l93.x - RAYON, a.l93.y - RAYON, a.l93.x + RAYON, a.l93.y + RAYON]);
   } catch (e) {
     chargement(null);
@@ -1228,8 +1291,11 @@ let interaction = false;
 controls.addEventListener('start', () => (interaction = true));
 controls.addEventListener('end', () => (interaction = false));
 let dureeHab = 0;
+let nImg = 0;
 renderer.setAnimationLoop((t) => {
   herbe?.maj(camera, t);
+  UN.uTemps.value = t / 1000;
+  if (t - nImg > 1500) (equiperScene(scene), (nImg = t)); // lumière des lampadaires sur les nouvelles matières
   ciel.position.copy(camera.position);
   if (document.body.classList.contains('studio')) return; // le Studio 3D a son propre rendu
   const dt = Math.min(0.1, (t - avant) / 1000);

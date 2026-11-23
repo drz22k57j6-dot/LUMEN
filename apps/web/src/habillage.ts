@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildBuilding, createKit } from './generateur/facades.js';
 import { buildShop } from './generateur/commerces.js';
+import { equiperFenetres } from './nuit';
 
 export interface TacheFacade {
   id: string;
@@ -52,7 +53,18 @@ export class Habillage {
 
   constructor(baseTextures: string) {
     this.kit = createKit(THREE, baseTextures);
+    // éclairage de nuit des pièces derrière les fenêtres (modèle horaire, voir nuit.ts)
+    equiperFenetres(this.kit as { vc: THREE.Material; rideau: THREE.Material; rideauTire: THREE.Material });
     this.groupe.name = 'facades_generees';
+  }
+
+  /** Lueur de jour des intérieurs : compensée la nuit (sinon l'adaptation de l'œil la rend blanche). */
+  nuit(expo: number) {
+    const M = this.kit as { vc: THREE.MeshStandardMaterial; uJour: { value: number } };
+    // proportionnel à la lumière du jour (expo ≈ 1–3 de jour, jusqu'à 6 000 la nuit) : nul la nuit
+    const jour = Math.min(1, 2 / expo);
+    M.vc.emissiveIntensity = jour;
+    M.uJour.value = jour;
   }
 
   vider() {

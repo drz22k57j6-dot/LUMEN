@@ -44,11 +44,14 @@ export function createKit(T, base) {
   }
   const std = o => new T.MeshStandardMaterial(o);
   // verre teinté brillant : reflet fort en incidence rasante, on voit l'intérieur de face (Fresnel sur l'opacité)
+  // uJour : 1 le jour, < 1 la nuit (le reflet de ciel ajouté ne doit pas être amplifié par l'adaptation nocturne)
+  const uJour = { value: 1 };
   const glass = (c, rough, a0, aMax = .85) => {
     const m = std({ color: c, metalness: .25, roughness: rough, envMapIntensity: 1.25, transparent: true, opacity: 1, depthWrite: false });
     m.onBeforeCompile = sh => {
-      sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `{ float fr=pow(1.-clamp(abs(dot(normalize(-vViewPosition), normal)),0.,1.),3.5);
-        diffuseColor.a=mix(${a0.toFixed(2)},${aMax.toFixed(2)},fr); outgoingLight+=vec3(.012,.016,.02); }
+      sh.uniforms.uJour = uJour;
+      sh.fragmentShader = 'uniform float uJour;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `{ float fr=pow(1.-clamp(abs(dot(normalize(-vViewPosition), normal)),0.,1.),3.5);
+        diffuseColor.a=mix(${a0.toFixed(2)},${aMax.toFixed(2)},fr); outgoingLight+=vec3(.012,.016,.02)*uJour; }
         #include <opaque_fragment>`);
     };
     m.customProgramCacheKey = () => 'verre' + a0.toFixed(2) + aMax;
@@ -56,7 +59,7 @@ export function createKit(T, base) {
   };
   const paints = new Map();
   const M = {
-    wall, set,
+    wall, set, uJour,
     paint(hex, rough, metal = .05) { const k = hex + ':' + rough.toFixed(2); if (!paints.has(k)) paints.set(k, std({ color: hex, roughness: rough, metalness: metal })); return paints.get(k); },
     zinc: new T.MeshStandardMaterial({ ...set('zinc'), color: 0x8a97a2, metalness: .6, roughness: .5 }),
     fonte: std({ color: 0x141619, metalness: .65, roughness: .42 }),
@@ -185,6 +188,23 @@ function tagTexture(T, R, n, w = 512, h = 256) {
   const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
 }
 
+// ------------------------------------------------------------------ identité des pièces (éclairage de nuit, voir nuit.ts)
+// Chaque géométrie d'intérieur, de vitre ou de rideau porte aPiece : identifiant de la pièce derrière la fenêtre
+// (−1 hors pièce). Le shader de nuit allume ou non chaque pièce, de façon stable et indépendante.
+const pieceId = (x, y) => ((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1 + 1) % 1 * .998 + .001;
+function taguer(T, G) {
+  G.pid = -1;
+  for (const k of ['vc', 'verre0', 'verre1', 'verre2', 'rid', 'ridT']) {
+    const arr = G[k];
+    if (!arr) continue;
+    arr.push = function (...gs) {
+      for (const g of gs) g.setAttribute('aPiece', new T.BufferAttribute(new Float32Array(g.attributes.position.count).fill(G.pid), 1));
+      return Array.prototype.push.apply(this, gs);
+    };
+  }
+  return G;
+}
+
 // ------------------------------------------------------------------ pièce derrière une fenêtre (murs, sol, plafond, meubles)
 const MURS_INT = [0xece6d8, 0xf3f0ea, 0xdcd6c8, 0xc9d1c2, 0xe6d2c4, 0xd3dbe0, 0xefe2c4, 0xbfc5c6, 0xa9b5a0, 0xe9dccb, 0x9fb1bd];
 const SOLS = [0x7a5534, 0x8d6a45, 0x5e4330, 0x9a7a55, 0x6b4a2e];
@@ -231,7 +251,11 @@ function room(T, G, R, cx, y0, w, h, zf, deep, o = {}) {
 }
 
 // ------------------------------------------------------------------ fenêtre (vantaux ouvrables, verre teinté, rideaux, pièce)
-function windowUnit(T, G, R, cx, ys, ww, wh, REC, o = {}) {
+function windowUnit(T, G, R, cx, ys, ...rest) {
+  G.pid = pieceId(cx, ys);
+  try { return windowUnit0(T, G, R, cx, ys, ...rest); } finally { G.pid = -1; }
+}
+function windowUnit0(T, G, R, cx, ys, ww, wh, REC, o = {}) {
   const z = -REC + .07, fw = .055, open = R() < (o.pOpen ?? .12), ang = open ? (1.1 + R() * .9) : 0;
   const vi = Math.floor(R() * 3), deep = o.deep ?? (DEEP - .05);
   if (o.backing) G.vc.push(vc(T, new T.PlaneGeometry(ww + .1, wh + .1).translate(cx, ys + wh / 2, z - .12), 0x2a2622, .3, R));
@@ -410,7 +434,7 @@ export function buildBuilding(T, M, o) {
   const tone = new T.Color(o.tone || 0xffffff);
   if (o.toneJit !== 0) tone.offsetHSL((R() - .5) * .012, (R() - .5) * .06, (R() - .5) * .04);
   const kind = style === 'modeste' ? 'enduit' : 'pierre';
-  const G = { lod: o.lod || 0, mur: [], rdc: [], moul: [], zinc: [], fonte: [], garde0: [], garde1: [], menu: [], rid: [], ridT: [], vc: [], lampe: [], terre: [], tube: [], verre0: [], verre1: [], verre2: [], lum: [], vit: [] };
+  const G = taguer(T, { lod: o.lod || 0, mur: [], rdc: [], moul: [], zinc: [], fonte: [], garde0: [], garde1: [], menu: [], rid: [], ridT: [], vc: [], lampe: [], terre: [], tube: [], verre0: [], verre1: [], verre2: [], lum: [], vit: [] });
   const extra = [];
   const REC = style === 'riche' ? .34 : .28, winW = Math.min(1.3, bw * .48);
   const yF = []; let y = 0; for (const h of F) { yF.push(y); y += h; } const Htop = y;
@@ -733,7 +757,7 @@ function entryDoor(T, G, extra, M, R, cx, y0, ww, wh, REC, num, o) {
 // ------------------------------------------------------------------ immeuble moderne (années 60-70)
 function buildModern(T, M, o, R) {
   const W = o.width, D = Math.max(o.depth || 12, 2.9), fh = 2.75, n = o.levels || (o.hGout ? Math.max(1, Math.round((o.hGout - 3.6) / fh)) : 8 + Math.floor(R() * 5)), H = 3.6 + n * fh, wear = o.wear ?? .5;
-  const G = { lod: o.lod || 0, mur: [], menu: [], vc: [], lampe: [], rid: [], ridT: [], fonte: [], verre0: [], verre1: [], verre2: [], tube: [], lum: [] };
+  const G = taguer(T, { lod: o.lod || 0, mur: [], menu: [], vc: [], lampe: [], rid: [], ridT: [], fonte: [], verre0: [], verre1: [], verre2: [], tube: [], lum: [] });
   G.mur.push(box(T, W, H, D - .3 - DEEP, W / 2, H / 2, -.3 - DEEP - (D - .3 - DEEP) / 2));
   for (const x of [.1, W - .1]) G.mur.push(box(T, .2, H, DEEP, x, H / 2, -.3 - DEEP / 2));
   for (let x = .3; x < W; x += 4) G.mur.push(box(T, .4, 3.6, .4, x, 1.8, -.2));
@@ -748,10 +772,12 @@ function buildModern(T, M, o, R) {
     for (let i = 0; i < nw; i++) {
       const cx = (i + .5) * cw;
       G.mur.push(box(T, .14, fh - 1.2, .3, i * cw + .07, y0 + 1.2 + (fh - 1.2) / 2, -.15));
+      G.pid = pieceId(cx, y0);
       room(T, G, R, cx, y0 + .35, cw - .14, fh - .65, -.3, DEEP - .05, { pal: R() < .5 ? pal : undefined, pLamp: .12 });
       G['verre' + Math.floor(R() * 3)].push(box(T, cw - .16, fh - 1.35, .01, cx, y0 + 1.2 + (fh - 1.35) / 2, -.25));
       G.menu.push(box(T, cw - .16, .05, .06, cx, y0 + 1.22, -.24)); G.menu.push(box(T, .05, fh - 1.35, .06, cx, y0 + 1.2 + (fh - 1.35) / 2, -.24));
       if (R() < .45) G.rid.push(box(T, cw * .45, fh - 1.4, .02, cx - cw * .2, y0 + 1.2 + (fh - 1.4) / 2, -.4));
+      G.pid = -1;
       if (R() < .12) pot(T, G, R, cx + (R() - .5) * cw * .5, y0 + 1.2, -.08, R() < .6);
     }
     G.mur.push(box(T, W, .3, .3, W / 2, y0 + fh - .15, -.15));
