@@ -7,7 +7,8 @@ import { azimutDe, azimutVrai, utcDepuisParis, versWgs84, versL93 as wgsVersL93,
 import { Code, directionSoleil, eclairement, positionSoleil } from '@lumen/analysis';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
-import { creerVoirie3D, libererVoirie } from './voirie3d';
+import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
+import { arbresLidar, creerArbres, majSaison } from './arbres';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -148,7 +149,7 @@ redim();
 // ---------------------------------------------------------------------------
 // État
 // ---------------------------------------------------------------------------
-interface Terrain { bbox: [number, number, number, number]; n: number; mnt: Float32Array; nT: number; couverture: number; surf: Float32Array }
+interface Terrain { bbox: [number, number, number, number]; n: number; mnt: Float32Array; nT: number; couverture: number; surf: Float32Array; classes: Uint8Array }
 let adresse: Adresse | null = null;
 let alt0 = 0;
 let batiments: Batiment[] = [];
@@ -190,6 +191,32 @@ function construireVoirie3D(v: Voirie) {
   if (voirie) (libererVoirie(voirie), scene.remove(voirie));
   voirie = creerVoirie3D(v, (p, dz) => local(p, solB(p) + dz), mobile);
   scene.add(voirie);
+  // Le relief LiDAR (MNS) contient voitures, mobilier, bas des arbres : sous la voirie on le passe
+  // 15 cm sous le sol (MNT), pour que rien ne traverse la chaussée ni les trottoirs.
+  if (!terrain) return;
+  const dans = masqueVoirie(v, terrain.bbox);
+  for (const r of [relief, detail]) {
+    if (!r) continue;
+    const pos = r.geometry.attributes.position as THREE.BufferAttribute;
+    let modifie = false;
+    for (let i = 0; i < pos.count; i++) {
+      const p = { x: pos.getX(i) + adresse!.l93.x, y: -pos.getZ(i) + adresse!.l93.y };
+      if (!dans(p)) continue;
+      const sol = solB(p) - alt0 - 0.15;
+      if (pos.getY(i) > sol) (pos.setY(i, sol), (modifie = true));
+    }
+    if (modifie) (pos.needsUpdate = true), r.geometry.computeVertexNormals();
+  }
+  // Les arbres d'alignement, retirés du relief, sont reconstruits depuis le LiDAR (position et hauteur mesurées).
+  if (arbres) (scene.remove(arbres), arbres.traverse((o) => o instanceof THREE.Mesh && (o.geometry.dispose(), (o.material as THREE.Material).dispose())));
+  const zD = grilleDetail?.bbox;
+  const horsDetail = (p: XY) => !zD || p.x < zD[0] || p.x > zD[2] || p.y < zD[1] || p.y > zD[3];
+  const liste = [
+    ...(grilleDetail ? arbresLidar(grilleDetail, solB, dans) : []),
+    ...arbresLidar({ n: terrain.n, bbox: terrain.bbox, hauteurs: terrain.surf, classes: terrain.classes }, solB, (p) => dans(p) && horsDetail(p)),
+  ];
+  arbres = creerArbres(liste, (p, dz) => local(p, solB(p) + dz), dateCourante().getMonth());
+  scene.add(arbres);
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -253,6 +280,7 @@ function majSoleil() {
   soleil.target.position.copy(c);
   soleil.target.updateMatrixWorld();
   // Lumière calculée à travers l'atmosphère (packages/analysis/lumiere.ts), aucun réglage à l'œil.
+  if (arbres) majSaison(arbres, d.getMonth());
   const E = eclairement(s.elevation);
   const lin = THREE.LinearSRGBColorSpace;
   soleil.intensity = PAR_LUX * E.directNormal;
@@ -612,6 +640,8 @@ function planterArbres(couronnes: { p: XY; hauteur: number; rayon: number }[], b
 }
 
 let detail: THREE.Mesh | null = null;
+let grilleDetail: Grille2 | null = null;
+let arbres: THREE.Group | null = null;
 let loin: THREE.Mesh | null = null;
 
 /** Zone lointaine (2 km) : LiDAR à 8 m + orthophoto, creusée sous la zone à 1 m. */
@@ -640,7 +670,8 @@ const habillage = new Habillage(import.meta.env.BASE_URL + 'tex/');
 scene.add(habillage.groupe);
 
 function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couverture: number; detail: Grille2 & { brut: Float32Array } }) {
-  terrain = { bbox: m.bbox, n: m.n, mnt: m.mnt, nT: m.nT, couverture: m.couverture, surf: m.hauteurs };
+  terrain = { bbox: m.bbox, n: m.n, mnt: m.mnt, nT: m.nT, couverture: m.couverture, surf: m.hauteurs, classes: m.classes };
+  grilleDetail = m.detail;
   alt0 = solA(adresse!.l93);
   const { bbox } = m;
   const zD = m.detail.bbox;

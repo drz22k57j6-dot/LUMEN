@@ -60,63 +60,79 @@ float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 `;
 
 const CORPS: Record<string, string> = {
-  // Enrobé : grain, variations à grande échelle, reprises rectangulaires, fissures, gravillons, taches d'huile.
+  // Enrobé parisien (BBSG 0/10) : gris moyen-foncé, gravillons clairs saillants, liant noir dans les creux,
+  // reprises rectangulaires, fissures, taches d'huile, bandes de roulement polies, salissure en pied de bordure.
   chaussee: `
     vec2 w = vWp.xz; float dist = length(cameraPosition - vWp);
-    vec4 a = texture2D(uBruit, w * 0.9), b = texture2D(uBruit, w * 0.045 + 0.3), c = texture2D(uBruit, w * 0.011 + 0.7);
-    col = vec3(0.105, 0.105, 0.112) * (0.78 + 0.44 * a.r) * (0.86 + 0.28 * b.g);
-    vec2 cel = floor(w / vec2(2.6, 6.5)); float rep = step(0.94, h21(cel)) * step(0.45, c.b);
-    col *= mix(1.0, 0.7 + 0.5 * h21(cel + 3.1), rep);
-    float fis = 1.0 - smoothstep(0.0, 0.01, abs(b.r - 0.5)); col *= 1.0 - 0.4 * fis * smoothstep(0.55, 0.72, c.g);
-    col += vec3(0.07) * smoothstep(0.78, 0.95, a.a) * (1.0 - smoothstep(12.0, 45.0, dist));
-    float huile = smoothstep(0.7, 0.86, b.b); col *= 1.0 - 0.3 * huile;
-    rough = clamp(0.9 + (a.r - 0.5) * 0.16 - 0.25 * huile, 0.45, 1.0);`,
-  // Asphalte coulé des trottoirs parisiens : plus lisse et plus chaud, chewing-gums, salissures.
+    vec4 g1 = texture2D(uBruit, w * 2.3), g2 = texture2D(uBruit, w * 0.37 + 0.2), b = texture2D(uBruit, w * 0.045 + 0.3), c = texture2D(uBruit, w * 0.011 + 0.7);
+    float grav = smoothstep(0.55, 0.95, g1.a);
+    col = mix(vec3(0.045, 0.046, 0.05), vec3(0.16, 0.155, 0.15), 0.35 + 0.4 * g1.r) ;
+    col = mix(col, vec3(0.22, 0.21, 0.2), grav * 0.6);
+    col *= 0.85 + 0.3 * b.g;
+    vec2 cel = floor(w / vec2(2.6, 6.5)); float rep = step(0.93, h21(cel)) * step(0.4, c.b);
+    col *= mix(1.0, 0.62 + 0.55 * h21(cel + 3.1), rep);
+    float fis = 1.0 - smoothstep(0.0, 0.008, abs(b.r - 0.5)); col *= 1.0 - 0.55 * fis * smoothstep(0.55, 0.72, c.g);
+    float huile = smoothstep(0.72, 0.88, b.b); col *= 1.0 - 0.35 * huile;
+    hBump = (g1.a * 0.006 + g1.r * 0.002 + g2.g * 0.003 - fis * 0.004) * (1.0 - smoothstep(20.0, 60.0, dist));
+    rough = clamp(0.92 - 0.35 * huile - 0.12 * grav, 0.4, 1.0);`,
+  // Asphalte coulé des trottoirs parisiens : gris anthracite chaud, grain fin, chewing-gums, coulures.
   trottoir: `
-    vec2 w = vWp.xz;
-    vec4 a = texture2D(uBruit, w * 1.7), b = texture2D(uBruit, w * 0.07 + 0.5), c = texture2D(uBruit, w * 0.4 + 0.2);
-    col = vec3(0.15, 0.142, 0.135) * (0.9 + 0.2 * a.r) * (0.88 + 0.24 * b.g);
-    col *= 1.0 - 0.45 * smoothstep(0.93, 0.97, c.a);
-    col = mix(col, col * vec3(0.8, 0.78, 0.74), smoothstep(0.62, 0.8, b.b) * 0.6);
-    rough = 0.82 + 0.1 * a.r;`,
-  // Granit : grains noirs et blancs, blocs de 0,70 à 1,20 m, joints, teinte par bloc.
+    vec2 w = vWp.xz; float dist = length(cameraPosition - vWp);
+    vec4 a = texture2D(uBruit, w * 3.1), b = texture2D(uBruit, w * 0.07 + 0.5), c = texture2D(uBruit, w * 0.4 + 0.2);
+    col = vec3(0.075, 0.07, 0.066) * (0.85 + 0.3 * a.r) * (0.85 + 0.3 * b.g);
+    float gomme = smoothstep(0.93, 0.965, c.a); col = mix(col, vec3(0.03, 0.03, 0.032), gomme * 0.8);
+    col = mix(col, col * vec3(1.25, 1.2, 1.12), smoothstep(0.6, 0.85, b.b) * 0.5);
+    hBump = (a.r * 0.0015 + a.a * 0.001 + gomme * 0.001) * (1.0 - smoothstep(15.0, 50.0, dist));
+    rough = 0.78 + 0.12 * a.r - 0.1 * gomme;`,
+  // Bordure granit gris (type T2, 14 cm vus) : grains noirs et blancs, blocs de 0,95 m, joints, salissure basse.
   bordure: `
     vec2 w = vWp.xz;
     float id = floor(vSt.x / 0.95); float j = fract(vSt.x / 0.95);
-    float joint = smoothstep(0.985, 1.0, j) + 1.0 - smoothstep(0.0, 0.012, j);
-    vec4 g = texture2D(uBruit, w * 7.0 + vWp.y * 3.0), b = texture2D(uBruit, w * 0.2);
-    col = vec3(0.46, 0.45, 0.43) * (0.9 + 0.2 * h21(vec2(id, 1.0)));
-    col *= 0.82 + 0.36 * g.r; col = mix(col, vec3(0.12), smoothstep(0.82, 0.95, g.a) * 0.8);
-    col *= 1.0 - 0.55 * joint; col *= 0.85 + 0.2 * b.g;
-    rough = 0.65 + 0.2 * g.r;`,
-  // Caniveau : 2 rangs de pavés de granit 14 × 20 cm, joints sombres, humidité côté bordure.
+    float joint = smoothstep(0.988, 1.0, j) + 1.0 - smoothstep(0.0, 0.01, j);
+    vec4 g = texture2D(uBruit, w * 9.0 + vWp.y * 4.0), b = texture2D(uBruit, w * 0.2);
+    col = vec3(0.36, 0.355, 0.34) * (0.88 + 0.22 * h21(vec2(id, 1.0)));
+    col *= 0.78 + 0.4 * g.r; col = mix(col, vec3(0.06), smoothstep(0.8, 0.95, g.a) * 0.85);
+    col = mix(col, vec3(0.6), smoothstep(0.9, 1.0, g.g) * 0.4);
+    col *= 1.0 - 0.6 * joint; col *= 0.8 + 0.25 * b.g;
+    col *= mix(0.6, 1.0, smoothstep(0.0, 1.0, vSt.y)); // salissure au pied (face vue)
+    hBump = g.r * 0.0015 - joint * 0.004;
+    rough = 0.6 + 0.25 * g.r;`,
+  // Caniveau : 2 rangs de pavés de granit 14 × 20 cm, joints creux, humidité et dépôts côté bordure.
   caniveau: `
     float r = floor(vSt.y / 0.175); vec2 q = vec2(vSt.x / 0.2 + 0.5 * r, vSt.y / 0.175);
     vec2 f = fract(q), i = floor(q);
-    float joint = max(1.0 - smoothstep(0.0, 0.07, min(f.x, 1.0 - f.x)), 1.0 - smoothstep(0.0, 0.09, min(f.y, 1.0 - f.y)));
-    vec4 g = texture2D(uBruit, vWp.xz * 5.0);
-    col = vec3(0.3, 0.29, 0.28) * (0.75 + 0.45 * h21(i)) * (0.85 + 0.3 * g.r);
-    col = mix(col, vec3(0.06, 0.06, 0.065), joint * 0.85);
-    col *= mix(0.72, 1.0, smoothstep(0.0, 0.09, vSt.y));
-    rough = mix(0.5, 0.85, smoothstep(0.0, 0.1, vSt.y)) - 0.1 * joint;`,
-  // Peinture routière : blanche, salie, usée par plaques (zones usées retirées).
+    float bord = min(min(f.x, 1.0 - f.x) * 0.2, min(f.y, 1.0 - f.y) * 0.175);
+    float joint = 1.0 - smoothstep(0.004, 0.012, bord);
+    vec4 g = texture2D(uBruit, vWp.xz * 6.0);
+    col = vec3(0.21, 0.205, 0.2) * (0.7 + 0.5 * h21(i)) * (0.8 + 0.35 * g.r);
+    col = mix(col, vec3(0.03, 0.03, 0.032), joint * 0.9);
+    float humide = 1.0 - smoothstep(0.0, 0.12, vSt.y);
+    col *= mix(1.0, 0.55, humide);
+    hBump = smoothstep(0.0, 0.02, bord) * 0.01 + g.r * 0.002;
+    rough = mix(0.82, 0.25, humide) - 0.15 * joint;`,
+  // Peinture routière (résine blanche) : légèrement en relief, salie, usée par plaques et dans les traces.
   marquage: `
-    vec4 a = texture2D(uBruit, vWp.xz * 1.3), b = texture2D(uBruit, vWp.xz * 0.15 + 0.4);
-    float usure = a.g * 0.6 + a.r * 0.4 + (b.b - 0.5) * 0.4;
-    if (usure > 0.66) discard;
-    col = vec3(0.72, 0.72, 0.68) * (0.8 + 0.25 * b.g) * (0.9 + 0.1 * a.r);
-    rough = 0.55 + 0.25 * a.r;`,
-  // Fonte (avaloirs, regards) : grille ou motif quadrillé dans vSt.
+    vec4 a = texture2D(uBruit, vWp.xz * 1.7), b = texture2D(uBruit, vWp.xz * 0.15 + 0.4), c = texture2D(uBruit, vWp.xz * 6.0);
+    float usure = a.g * 0.55 + a.r * 0.35 + (b.b - 0.5) * 0.5 + c.a * 0.25;
+    if (usure > 0.74) discard;
+    col = vec3(0.62, 0.62, 0.58) * (0.78 + 0.25 * b.g) * (0.88 + 0.12 * a.r) * mix(1.0, 0.55, smoothstep(0.6, 0.74, usure));
+    hBump = 0.002 + c.r * 0.001;
+    rough = 0.6 + 0.25 * a.r;`,
+  // Fonte (avaloirs, regards) : grille ou motif quadrillé, rouille dans les creux.
   fonte: `
     vec4 a = texture2D(uBruit, vWp.xz * 3.0);
     float g = step(0.5, fract(vSt.x * 6.0)) * step(0.15, vSt.y) * step(vSt.y, 0.85);
-    col = vec3(0.07, 0.065, 0.06) * (0.8 + 0.4 * a.r) * mix(1.0, 0.25, g);
-    rough = 0.55 + 0.3 * a.r;`,
-  // Allées stabilisées (sable de parc).
+    vec2 dam = step(0.5, fract(vSt * 14.0)); float motif = abs(dam.x - dam.y);
+    col = vec3(0.05, 0.047, 0.044) * (0.8 + 0.4 * a.r) * mix(1.0, 0.2, g) * mix(1.0, 0.75, motif);
+    col = mix(col, vec3(0.12, 0.06, 0.03), smoothstep(0.7, 0.9, a.b) * 0.5);
+    hBump = motif * 0.003 - g * 0.01;
+    rough = 0.45 + 0.35 * a.r;`,
+  // Allées stabilisées (sable de parc, gravillons).
   allee: `
     vec4 a = texture2D(uBruit, vWp.xz * 2.2), b = texture2D(uBruit, vWp.xz * 0.08 + 0.1);
-    col = vec3(0.52, 0.46, 0.35) * (0.82 + 0.3 * a.r) * (0.88 + 0.22 * b.g);
+    col = vec3(0.42, 0.37, 0.28) * (0.82 + 0.3 * a.r) * (0.88 + 0.22 * b.g);
     col = mix(col, col * 0.6, smoothstep(0.8, 0.95, a.a));
+    hBump = a.a * 0.004 + a.r * 0.002;
     rough = 0.95;`,
 };
 
@@ -131,8 +147,17 @@ function materiau(nom: string, bruit: THREE.Texture, decalage: number): THREE.Me
       s.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz; vSt = aSt;');
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_COMMUN)
-      .replace('#include <map_fragment>', `vec3 col; float rough;\n{${CORPS[nom]}}\ndiffuseColor.rgb *= col;`)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = rough;');
+      .replace('#include <map_fragment>', `vec3 col; float rough; float hBump = 0.0;\n{${CORPS[nom]}}\ndiffuseColor.rgb *= col;`)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = rough;')
+      // relief de surface (gravillons, joints, grain) : perturbation de normale par dérivées d'écran
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        { vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition), vN = normal;
+          vec3 R1 = cross(sy, vN), R2 = cross(vN, sx); float det = dot(sx, R1);
+          vec2 dH = vec2(dFdx(hBump), dFdy(hBump)) * 2.5;
+          normal = normalize(abs(det) * vN - sign(det) * (dH.x * R1 + dH.y * R2)); }`,
+      );
   };
   m.customProgramCacheKey = () => m.name;
   return m;
@@ -312,4 +337,32 @@ export function libererVoirie(g: THREE.Group) {
       (o.material as THREE.MeshStandardMaterial).dispose();
     }
   });
+}
+
+/**
+ * Masque de la voirie (chaussée, trottoirs, allées) rastérisé à 0,5 m, élargi de 0,5 m.
+ * Sert à passer le relief LiDAR (MNS : voitures, mobilier, feuillage bas) sous la chaussée.
+ */
+export function masqueVoirie(v: Voirie, bbox: [number, number, number, number], res = 0.5): (p: XY) => boolean {
+  const w = Math.ceil((bbox[2] - bbox[0]) / res), h = Math.ceil((bbox[3] - bbox[1]) / res);
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const ctx = cv.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  ctx.fillStyle = ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2; // 1 m de marge (0,5 m de chaque côté)
+  for (const poly of [...v.chaussee, ...v.trottoirs, ...v.allees]) {
+    ctx.beginPath();
+    for (const r of poly)
+      r.forEach((p, i) => {
+        const x = (p.x - bbox[0]) / res, y = (bbox[3] - p.y) / res;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+    ctx.closePath();
+    ctx.fill('evenodd');
+    ctx.stroke();
+  }
+  const d = ctx.getImageData(0, 0, w, h).data;
+  return (p) => {
+    const i = Math.floor((p.x - bbox[0]) / res), j = Math.floor((bbox[3] - p.y) / res);
+    return i >= 0 && j >= 0 && i < w && j < h && d[(j * w + i) * 4]! > 0;
+  };
 }
