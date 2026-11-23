@@ -38,6 +38,9 @@ importers:
       '@lumen/urban':
         specifier: workspace:*
         version: link:../../packages/urban
+      '@lumen/vegetation':
+        specifier: workspace:*
+        version: link:../../packages/vegetation
       geotiff:
         specifier: ^2.1.3
         version: 2.1.3
@@ -90,6 +93,12 @@ importers:
       clipper-lib:
         specifier: 6.4.2
         version: 6.4.2
+
+  packages/vegetation:
+    dependencies:
+      '@lumen/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 

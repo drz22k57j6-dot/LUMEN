@@ -1,13 +1,14 @@
 import { fromArrayBuffer } from 'geotiff';
 import { convergenceL93, debutJourParis, type LonLat, type XY } from '@lumen/core';
 import { altitude, ensoleillementAnnee, type Grille } from '@lumen/analysis';
+import { attenuationMoyenne } from '@lumen/vegetation';
 import { construireVoirie, COUCHES, urlWms, type Troncon } from '@lumen/urban';
 import type { Batiment } from '@lumen/core';
 
 export type Requete =
   | { type: 'charger'; centre: XY; rayon: number; rayonDetail: number; rayonLoin: number; emprises: XY[][] }
   | { type: 'voirie'; troncons: Troncon[]; batiments: Batiment[]; emprise: [number, number, number, number] }
-  | { type: 'calculer'; lieu: LonLat; points: { x: number; y: number; z: number }[]; azimut: number; annee: number };
+  | { type: 'calculer'; lieu: LonLat; points: { x: number; y: number; z: number }[]; azimut: number; annee: number; especes?: Record<string, number> };
 
 let mns: Grille | null = null;
 
@@ -170,6 +171,8 @@ function calculer(q: Extract<Requete, { type: 'calculer' }>) {
     azimutFacade: q.azimut,
     annee: q.annee,
     debutJour: debutJourParis,
+    // feuillage saisonnier des espèces présentes autour de la fenêtre (Beer-Lambert)
+    attenuationVegetation: attenuationMoyenne(q.especes ?? {}),
     progression: (f) => post({ type: 'progression', f }),
   });
   post({ type: 'resultat', ...r, ms: performance.now() - t0 }, [r.codes.buffer]);

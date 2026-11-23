@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh';
-import { azimutDe, azimutVrai, utcDepuisParis, versWgs84, type Adresse, type Batiment, type XY } from '@lumen/core';
+import { azimutDe, azimutVrai, utcDepuisParis, versWgs84, versL93 as wgsVersL93, type Adresse, type Batiment, type XY } from '@lumen/core';
 import { Code, directionSoleil, eclairement, positionSoleil } from '@lumen/analysis';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
@@ -11,6 +11,8 @@ import { creerVoirie3D, libererVoirie } from './voirie3d';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
+import { creerForet, type Foret } from './arbres3d';
+import { couronnesLidar, depuisParis, especeDuGenre, fusionner, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
 import { initStudio } from './studio3d';
 import { initCarte } from './carte2d';
 import { Habillage, styleDe, type TacheFacade } from './habillage';
@@ -243,6 +245,7 @@ const lieu = () => adresse?.position ?? { lon: 2.35, lat: 48.85 };
 
 function majSoleil() {
   const d = dateCourante();
+  foret?.majSaison(d);
   const s = positionSoleil(d, lieu());
   const [x, y, z] = directionSoleil(s);
   const c = vueFenetre || vueRue ? camera.position : controls.target;
@@ -560,6 +563,54 @@ function nettoyerBords(g: Grille2) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Arbres (moteur Végétation)
+// ---------------------------------------------------------------------------
+let foret: Foret | null = null;
+let arbres: Arbre[] = [];
+function couronnesDe(g: Grille2, exclure?: (p: XY) => boolean) {
+  const { n, bbox } = g, res = (bbox[2] - bbox[0]) / n;
+  const h = new Float32Array(n * n), veg = new Uint8Array(n * n);
+  for (let i = 0; i < n * n; i++) {
+    if (g.classes[i] !== 2) continue;
+    const x = bbox[0] + ((i % n) + 0.5) * res, y = bbox[3] - (Math.floor(i / n) + 0.5) * res;
+    h[i] = g.hauteurs[i]! - solA({ x, y });
+    veg[i] = 1;
+  }
+  return couronnesLidar({ x0: bbox[0], y0: bbox[3], res, n, h, veg }).filter((c) => !exclure?.(c.p));
+}
+function aplanirVegetation(g: Grille2) {
+  const { n, bbox } = g, res = (bbox[2] - bbox[0]) / n;
+  for (let i = 0; i < n * n; i++) {
+    if (g.classes[i] !== 2) continue;
+    g.hauteurs[i] = solA({ x: bbox[0] + ((i % n) + 0.5) * res, y: bbox[3] - (Math.floor(i / n) + 0.5) * res });
+    g.classes[i] = 0;
+  }
+}
+function afficherForet(liste: Arbre[]) {
+  if (foret) (foret.liberer(), scene.remove(foret.groupe));
+  arbres = liste;
+  const c = adresse!.l93;
+  foret = creerForet(liste, (a) => local(a.p, solA(a.p)), (a) => Math.hypot(a.p.x - c.x, a.p.y - c.y), mobile ? 60 : 130);
+  foret.majSaison(dateCourante());
+  scene.add(foret.groupe);
+}
+function planterArbres(couronnes: { p: XY; hauteur: number; rayon: number }[], bbox: Terrain['bbox']) {
+  const dedans = (p: XY) => p.x > bbox[0] + 2 && p.x < bbox[2] - 2 && p.y > bbox[1] + 2 && p.y < bbox[3] - 2;
+  afficherForet(fusionner([], couronnes, dedans));
+  // Paris : inventaire officiel (espèce, hauteur) recalé sur le LiDAR
+  const a = adresse!, { lon, lat } = a.position;
+  if (lon < 2.2 || lon > 2.48 || lat < 48.8 || lat > 48.92) return;
+  fetch(urlArbresParis(lon, lat, RAYON * 1.2))
+    .then((r) => (r.ok ? r.json() : []))
+    .then((liste: ArbreParis[]) => {
+      if (adresse !== a) return;
+      const inv = liste.map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la }))).filter((x): x is Arbre => !!x && dedans(x.p));
+      afficherForet(fusionner(inv, couronnes, dedans));
+    })
+    .catch(() => undefined);
+}
+
 let detail: THREE.Mesh | null = null;
 let loin: THREE.Mesh | null = null;
 
@@ -595,6 +646,13 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const zD = m.detail.bbox;
   for (const r of [relief, detail]) if (r) (r.geometry.dispose(), scene.remove(r));
   // Large zone à 1 m, creusée là où la zone de détail à 50 cm prend le relais.
+  // Arbres : couronnes mesurées dans le LiDAR (sommet, hauteur, rayon), puis le LiDAR végétation est ramené au sol
+  // (les arbres 3D, à feuillage saisonnier, le remplacent). L'inventaire de Paris ajoute l'espèce.
+  const dansD = (p: XY) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3];
+  const couronnes = [...couronnesDe(m.detail), ...couronnesDe(m, dansD)];
+  aplanirVegetation(m);
+  aplanirVegetation(m.detail);
+  planterArbres(couronnes, bbox);
   relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
   const taches = tachesFacades(m.detail);
   (window as unknown as { __taches: unknown }).__taches = taches;
@@ -954,7 +1012,9 @@ $('calculer').onclick = () => {
   }));
   $<HTMLButtonElement>('calculer').disabled = true;
   $('barre').hidden = false;
-  envoyer({ type: 'calculer', lieu: versWgs84(f.point), points, azimut: f.azimut, annee: new Date().getFullYear() });
+  const especes: Record<string, number> = {};
+  for (const ar of arbres) if (Math.hypot(ar.p.x - f.point.x, ar.p.y - f.point.y) < 80) especes[ar.espece] = (especes[ar.espece] ?? 0) + 1;
+  envoyer({ type: 'calculer', lieu: versWgs84(f.point), points, azimut: f.azimut, annee: new Date().getFullYear(), especes });
 };
 
 const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -1025,7 +1085,7 @@ function afficherResultat(r: { jours: number; creneaux: number; pasMinutes: numb
     <div class="doux">Axe vertical : de 5 h (haut) à 22 h (bas), heure de Paris.</div>
     <h2>Moyenne par jour et plages du 21</h2>
     <div class="mois">${MOIS.map((m, i) => `<span>${m}</span><div class="b" style="width:${(moyMois[i]! / maxM) * 100}%"></div><b>${hm(moyMois[i]!)}</b><div class="p">${plages(debutMois(i) + 20)}</div>`).join('')}</div>
-    <div class="prov">Méthode : rayons tous les ${pasMinutes} min sur ${jours} jours, 3 points sur la largeur de la fenêtre, obstacles issus du MNS LiDAR HD IGN (50 cm : bâtiments réels, toits, arbres, relief). Arbres comptés comme opaques toute l'année. Étage et hauteur d'étage estimés. Calcul en ${(r.ms / 1000).toFixed(1)} s.</div>`;
+    <div class="prov">Méthode : rayons tous les ${pasMinutes} min sur ${jours} jours, 3 points sur la largeur de la fenêtre, obstacles issus du MNS LiDAR HD IGN (50 cm : bâtiments réels, toits, arbres, relief). Arbres semi-transparents selon la saison et l'espèce (feuillage, branches nues en hiver). Étage et hauteur d'étage estimés. Calcul en ${(r.ms / 1000).toFixed(1)} s.</div>`;
   const cv = $<HTMLCanvasElement>('carte');
   const ctx = cv.getContext('2d')!;
   const img = ctx.createImageData(cv.width, cv.height);

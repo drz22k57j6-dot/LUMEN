@@ -10,6 +10,7 @@
     "@lumen/analysis": "workspace:*",
     "@lumen/core": "workspace:*",
     "@lumen/interior": "workspace:*",
+    "@lumen/vegetation": "workspace:*",
     "@lumen/urban": "workspace:*",
     "geotiff": "^2.1.3",
     "maplibre-gl": "^4.7.1",
