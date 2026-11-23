@@ -10,7 +10,6 @@ import { chargerMeteo, etatA, type GrilleMeteo } from './ciel/meteo';
 import { Nuages, transmission } from './ciel/nuages';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
-import { creerSolUrbain, orthoSol } from './sol3d';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -172,7 +171,6 @@ let alt0 = 0;
 let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
-let solUrbain: THREE.Mesh | null = null;
 let monuments: Monument[] = [];
 let groupeMonuments: THREE.Group | null = null;
 let terrain: Terrain | null = null;
@@ -225,20 +223,12 @@ function construireVoirie3D(v: Voirie) {
     for (let i = 0; i < pos.count; i++) {
       const p = { x: pos.getX(i) + adresse!.l93.x, y: -pos.getZ(i) + adresse!.l93.y };
       if (!dans(p) && classe(p) === 1) continue;
-      const sol = solB(p) - alt0 - 0.15;
+      // sous la voirie : 15 cm plus bas (le maillage de voirie recouvre) ; ailleurs : le relief EST le sol visible
+      const sol = solB(p) - alt0 - (dans(p) ? 0.15 : 0);
       if (pos.getY(i) > sol) (pos.setY(i, sol), (modifie = true));
     }
     if (modifie) (pos.needsUpdate = true), r.geometry.computeVertexNormals();
   }
-  if (solUrbain) (scene.remove(solUrbain), solUrbain.geometry.dispose(), (solUrbain.material as THREE.Material).dispose());
-  solUrbain = creerSolUrbain({
-    bbox: T.bbox,
-    centre: adresse!.l93,
-    garder: (p) => classe(p) !== 1, // passe aussi sous la voirie : aucun jour entre trottoir et place
-    vers3: (p, dz) => local(p, solB(p) + dz),
-    mobile,
-  });
-  scene.add(solUrbain);
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -834,7 +824,6 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
       t.needsUpdate = true;
       matRelief.map?.dispose();
       matRelief.map = t;
-      orthoSol(t);
       matRelief.needsUpdate = true;
     })
     .catch(() => {})
