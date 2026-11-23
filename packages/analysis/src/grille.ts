@@ -37,11 +37,15 @@ export function altitude(g: Grille, x: number, y: number): number {
  * Lance un rayon depuis o (L93 + altitude) dans la direction d (est, nord, haut).
  * Renvoie le code d'obstacle rencontré, ou Code.Soleil si le rayon sort libre.
  */
-export function lancerRayon(g: Grille, o: { x: number; y: number; z: number }, d: [number, number, number]): Code {
+export function lancerRayon(g: Grille, o: { x: number; y: number; z: number }, d: [number, number, number], attenuationVeg?: number): Code {
   const horiz = Math.hypot(d[0], d[1]);
   if (horiz < 1e-6) return Code.Soleil;
   const pas = g.res * 0.5;
   const dt = pas / horiz;
+  // Végétation semi-transparente (loi de Beer-Lambert) : transmission = exp(−k × distance dans la couronne).
+  // Le rayon est « ombré » quand moins de la moitié de la lumière passe. Sans k : végétation opaque.
+  let optique = 0;
+  const pasReel = Math.hypot(pas, d[2] * dt);
   for (let t = dt; ; t += dt) {
     const z = o.z + d[2] * t;
     if (z > g.zMax) return Code.Soleil;
@@ -54,6 +58,11 @@ export function lancerRayon(g: Grille, o: { x: number; y: number; z: number }, d
     const zz = g.z[i]!;
     if (zz > z) {
       const k = g.classe?.[i] ?? 1;
+      if (k === 2 && attenuationVeg !== undefined) {
+        optique += attenuationVeg * pasReel;
+        if (optique > Math.LN2) return Code.OmbreVegetation;
+        continue;
+      }
       return k === 2 ? Code.OmbreVegetation : k === 0 ? Code.OmbreRelief : Code.OmbreBatiment;
     }
   }
@@ -72,6 +81,8 @@ export interface ParamsAnnee {
   debutJour: (annee: number, jourAnnee: number) => number;
   pasMinutes?: number;
   progression?: (f: number) => void;
+  /** Atténuation de la végétation (par mètre) selon le jour de l'année : feuillage saisonnier. Absent : arbres opaques. */
+  attenuationVegetation?: (jourAnnee: number) => number;
 }
 
 export interface ResultatAnnee {
@@ -91,6 +102,7 @@ export function ensoleillementAnnee(p: ParamsAnnee): ResultatAnnee {
   const majorite = Math.ceil(p.points.length / 2);
   for (let j = 0; j < jours; j++) {
     const t0 = p.debutJour(p.annee, j);
+    const kVeg = p.attenuationVegetation?.(j);
     for (let k = 0; k < creneaux; k++) {
       // Milieu du créneau.
       const s = positionSoleil(new Date(t0 + (k + 0.5) * pas * 60_000), p.lieu);
@@ -100,7 +112,7 @@ export function ensoleillementAnnee(p: ParamsAnnee): ResultatAnnee {
       let soleil = 0;
       const obstacles = [0, 0, 0, 0, 0];
       for (const o of p.points) {
-        const c = lancerRayon(p.grille, o, d);
+        const c = lancerRayon(p.grille, o, d, kVeg);
         if (c === Code.Soleil) soleil++;
         else obstacles[c]!++;
       }
