@@ -196,6 +196,10 @@ function solB(p: XY): number {
 }
 
 function construireVoirie3D(v: Voirie) {
+  if (terrain) {
+    surChaussee = masqueVoirie(v, terrain.bbox, 0.5, true);
+    if (inventaireArbres.length) afficherForet(corrigerArbres(inventaireArbres));
+  }
   if (voirie) (libererVoirie(voirie), scene.remove(voirie));
   voirie = creerVoirie3D(v, (p, dz) => local(p, solB(p) + dz), mobile);
   scene.add(voirie);
@@ -448,6 +452,7 @@ $('ec3D').onclick = passer3D;
 $('retourCarte').onclick = retourCarte;
 
 async function charger(a: Adresse) {
+  surChaussee = null;
   clearTimeout(minuteur);
   sugg.innerHTML = '';
   q.value = a.label;
@@ -662,10 +667,48 @@ function afficherForet(liste: Arbre[]) {
   foret.majSaison(dateCourante());
   scene.add(foret.groupe);
 }
-/** Arbres : uniquement l'inventaire officiel de la ville (position, espèce, hauteur), sans le LiDAR,
- *  dont les « couronnes » détectées tombaient parfois sur des toits ou des bâtiments. */
+let surChaussee: ((p: XY) => boolean) | null = null;
+let inventaireArbres: Arbre[] = [];
+
+/** Un tronc ne peut être ni sur la chaussée ni dans un bâtiment : l'inventaire de la Ville est précis au mètre
+ *  près, nos emprises aussi ; quand les deux se contredisent, on décale le tronc vers le point libre le plus
+ *  proche (≤ 3 m, généralement le trottoir), sinon l'arbre est écarté. La couronne est taillée pour ne pas
+ *  traverser les façades (taille architecturée des arbres d'alignement parisiens). */
+function corrigerArbres(liste: Arbre[]): Arbre[] {
+  const proches = (p: XY) => batiments.filter((b) => b.contour.some((q) => Math.abs(q.x - p.x) < 60 && Math.abs(q.y - p.y) < 60));
+  const libre = (p: XY, bs: Batiment[]) => !(surChaussee?.(p) ?? false) && !bs.some((b) => contient(b.contour, p));
+  const distMur = (p: XY, bs: Batiment[]) => {
+    let d = Infinity;
+    for (const b of bs)
+      for (let i = 0; i < b.contour.length; i++) {
+        const a = b.contour[i]!, c = b.contour[(i + 1) % b.contour.length]!;
+        const dx = c.x - a.x, dy = c.y - a.y, l2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+        d = Math.min(d, Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y));
+      }
+    return d;
+  };
+  const out: Arbre[] = [];
+  for (const a of liste) {
+    const bs = proches(a.p);
+    let p: XY | null = libre(a.p, bs) ? a.p : null;
+    for (let r = 0.5; !p && r <= 3; r += 0.5)
+      for (let k = 0; k < 16 && !p; k++) {
+        const q = { x: a.p.x + Math.cos((k / 16) * Math.PI * 2) * r, y: a.p.y + Math.sin((k / 16) * Math.PI * 2) * r };
+        if (libre(q, bs)) p = q;
+      }
+    if (!p) continue;
+    const rMax = Math.max(1.2, distMur(p, bs) + 0.4);
+    const rc = a.rayonCouronne.valeur > rMax ? { ...a.rayonCouronne, valeur: rMax, origine: a.rayonCouronne.origine + ' · taillée côté façade' } : a.rayonCouronne;
+    out.push({ ...a, p, rayonCouronne: rc });
+  }
+  return out;
+}
+
+/** Arbres : uniquement l'inventaire officiel de la ville (position, espèce, hauteur), corrigé par corrigerArbres. */
 function planterArbres(_couronnes: unknown, bbox: Terrain['bbox']) {
   const dedans = (p: XY) => p.x > bbox[0] + 2 && p.x < bbox[2] - 2 && p.y > bbox[1] + 2 && p.y < bbox[3] - 2;
+  inventaireArbres = [];
   afficherForet([]);
   const a = adresse!, { lon, lat } = a.position;
   if (lon < 2.2 || lon > 2.48 || lat < 48.8 || lat > 48.92) return; // inventaire disponible : Paris
@@ -673,10 +716,8 @@ function planterArbres(_couronnes: unknown, bbox: Terrain['bbox']) {
     .then((r) => (r.ok ? r.json() : []))
     .then((liste: ArbreParis[]) => {
       if (adresse !== a) return;
-      const inv = liste
-        .map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la })))
-        .filter((x): x is Arbre => !!x && dedans(x.p) && !batiments.some((b) => contient(b.contour, x.p)));
-      afficherForet(inv);
+      inventaireArbres = liste.map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la }))).filter((x): x is Arbre => !!x && dedans(x.p));
+      afficherForet(corrigerArbres(inventaireArbres));
     })
     .catch(() => undefined);
 }

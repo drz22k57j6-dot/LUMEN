@@ -343,13 +343,13 @@ export function libererVoirie(g: THREE.Group) {
  * Masque de la voirie (chaussée, trottoirs, allées) rastérisé à 0,5 m, élargi de 0,5 m.
  * Sert à passer le relief LiDAR (MNS : voitures, mobilier, feuillage bas) sous la chaussée.
  */
-export function masqueVoirie(v: Voirie, bbox: [number, number, number, number], res = 0.5): (p: XY) => boolean {
+export function masqueVoirie(v: Voirie, bbox: [number, number, number, number], res = 0.5, chausseeSeule = false): (p: XY) => boolean {
   const w = Math.ceil((bbox[2] - bbox[0]) / res), h = Math.ceil((bbox[3] - bbox[1]) / res);
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   const ctx = cv.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   ctx.fillStyle = ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2; // 1 m de marge (0,5 m de chaque côté)
-  for (const poly of [...v.chaussee, ...v.trottoirs, ...v.allees]) {
+  ctx.lineWidth = chausseeSeule ? 0.6 : 2; // 1 m de marge (0,5 m de chaque côté) ; 15 cm pour la chaussée seule
+  for (const poly of chausseeSeule ? v.chaussee : [...v.chaussee, ...v.trottoirs, ...v.allees]) {
     ctx.beginPath();
     for (const r of poly)
       r.forEach((p, i) => {
