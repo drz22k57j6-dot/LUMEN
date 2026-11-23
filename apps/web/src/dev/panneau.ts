@@ -20,7 +20,9 @@ export interface ContexteDev {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
+  /** Ouvre le monde 3D (dernière version) à cette adresse, sans passer par la carte 2D. */
   charger: (a: Adresse) => unknown;
+  carte2D: () => void;
   ouvrirStudio: () => void;
   ouvrirPlan: () => void;
   etat: () => Record<string, unknown>;
@@ -64,9 +66,11 @@ export function installerModeDev(ctx: ContexteDev) {
     <b>Mode développeur</b> <span style="color:#999">— temporaire, retiré au lancement</span>
     <h4>Accès</h4>
     <div class="rang"><button data-a="studio">🧊 Studio 3D</button><button data-a="plan">▦ Plan 2D</button><button data-a="haut">⬆ Vue de haut</button><button data-a="libre">🎥 Caméra libre</button></div>
-    <h4>Aller à</h4>
+    <h4>Monde 3D — rechercher une adresse</h4>
+    <div class="rang" style="flex-wrap:nowrap"><input id="devAdresse" type="text" placeholder="Ex. 12 rue de Rivoli Paris" autocomplete="off" /><button data-a="chercher">🔍</button></div>
+    <div id="devSugg"></div>
     <div class="rang">${LIEUX.map(([n], i) => `<button data-lieu="${i}">${n}</button>`).join('')}</div>
-    <input id="devAdresse" type="text" placeholder="Adresse libre puis Entrée" />
+    <div class="rang"><button data-a="carte">🗺 Carte 2D d'accueil</button></div>
     <h4>Monde 3D (calques)</h4><div id="devCalques"></div>
     <div class="rang">
       <label><input id="devFil" type="checkbox"> Fil de fer</label>
@@ -91,6 +95,8 @@ export function installerModeDev(ctx: ContexteDev) {
       c.minDistance = 0.5; c.maxDistance = 20000; c.maxPolarAngle = Math.PI; c.enablePan = true;
       c.screenSpacePanning = true;
     },
+    chercher: () => void chercher($<HTMLInputElement>('#devAdresse').value, true),
+    carte: () => { p.hidden = true; ctx.carte2D(); },
     copier: () => { void navigator.clipboard?.writeText(JSON.stringify(ctx.etat(), null, 2)).catch(() => undefined); },
     vider: async () => {
       try { localStorage.clear(); sessionStorage.clear(); } catch { /* indisponible */ }
@@ -101,15 +107,33 @@ export function installerModeDev(ctx: ContexteDev) {
   };
   p.querySelectorAll<HTMLButtonElement>('[data-a]').forEach((b) => (b.onclick = () => void actions[b.dataset.a!]?.()));
 
-  // Aller à
-  const aller = async (q: string) => {
+  // Recherche d'adresse → monde 3D
+  const ouvrir = (a: Adresse) => { p.hidden = true; $('#devSugg').innerHTML = ''; ctx.charger(a); };
+  let jeton = 0, minuteur = 0;
+  async function chercher(q: string, direct = false) {
+    const sugg = $('#devSugg');
+    if (q.trim().length < 3) return void (sugg.innerHTML = '');
+    const n = ++jeton;
     try {
-      const [a] = await geocoder(q, 1);
-      if (a) { p.hidden = true; ctx.charger(a); }
-    } catch (e) { $('#devEtat').textContent = String(e); }
-  };
-  p.querySelectorAll<HTMLButtonElement>('[data-lieu]').forEach((b) => (b.onclick = () => void aller(LIEUX[+b.dataset.lieu!]![1])));
-  $<HTMLInputElement>('#devAdresse').onkeydown = (e) => { if (e.key === 'Enter') void aller((e.target as HTMLInputElement).value); };
+      const res = await geocoder(q, 6);
+      if (n !== jeton) return;
+      if (direct && res[0]) return ouvrir(res[0]);
+      sugg.innerHTML = '';
+      for (const a of res) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.cssText = 'display:block;width:100%;text-align:left';
+        b.textContent = a.label;
+        b.onclick = () => ouvrir(a);
+        sugg.append(b);
+      }
+      if (!res.length) sugg.textContent = 'Aucune adresse trouvée.';
+    } catch (e) { sugg.textContent = String(e); }
+  }
+  const champ = $<HTMLInputElement>('#devAdresse');
+  champ.oninput = () => { clearTimeout(minuteur); minuteur = window.setTimeout(() => void chercher(champ.value), 250); };
+  champ.onkeydown = (e) => { if (e.key === 'Enter') void chercher(champ.value, true); };
+  p.querySelectorAll<HTMLButtonElement>('[data-lieu]').forEach((b) => (b.onclick = () => void chercher(LIEUX[+b.dataset.lieu!]![1], true)));
 
   // Calques : chaque objet de la scène peut être masqué
   function calques() {
