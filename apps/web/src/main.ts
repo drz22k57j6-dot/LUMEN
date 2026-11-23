@@ -15,7 +15,7 @@ import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModel
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { creerForet, type Foret } from './arbres3d';
-import { couronnesLidar, depuisParis, especeDuGenre, fusionner, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
+import { depuisParis, especeDuGenre, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
 import { initStudio } from './studio3d';
 import { initCarte } from './carte2d';
 import { Habillage, styleDe, type TacheFacade } from './habillage';
@@ -196,10 +196,6 @@ function solB(p: XY): number {
 }
 
 function construireVoirie3D(v: Voirie) {
-  if (terrain) {
-    surChaussee = masqueVoirie(v, terrain.bbox, 0.5, true);
-    if (inventaireArbres.length) afficherForet(corrigerArbres(inventaireArbres));
-  }
   if (voirie) (libererVoirie(voirie), scene.remove(voirie));
   voirie = creerVoirie3D(v, (p, dz) => local(p, solB(p) + dz), mobile);
   scene.add(voirie);
@@ -452,7 +448,6 @@ $('ec3D').onclick = passer3D;
 $('retourCarte').onclick = retourCarte;
 
 async function charger(a: Adresse) {
-  surChaussee = null;
   clearTimeout(minuteur);
   sugg.innerHTML = '';
   q.value = a.label;
@@ -640,17 +635,6 @@ function nettoyerBords(g: Grille2) {
 // ---------------------------------------------------------------------------
 let foret: Foret | null = null;
 let arbres: Arbre[] = [];
-function couronnesDe(g: Grille2, exclure?: (p: XY) => boolean) {
-  const { n, bbox } = g, res = (bbox[2] - bbox[0]) / n;
-  const h = new Float32Array(n * n), veg = new Uint8Array(n * n);
-  for (let i = 0; i < n * n; i++) {
-    if (g.classes[i] !== 2) continue;
-    const x = bbox[0] + ((i % n) + 0.5) * res, y = bbox[3] - (Math.floor(i / n) + 0.5) * res;
-    h[i] = g.hauteurs[i]! - solA({ x, y });
-    veg[i] = 1;
-  }
-  return couronnesLidar({ x0: bbox[0], y0: bbox[3], res, n, h, veg }).filter((c) => !exclure?.(c.p));
-}
 function aplanirVegetation(g: Grille2) {
   const { n, bbox } = g, res = (bbox[2] - bbox[0]) / n;
   for (let i = 0; i < n * n; i++) {
@@ -667,48 +651,10 @@ function afficherForet(liste: Arbre[]) {
   foret.majSaison(dateCourante());
   scene.add(foret.groupe);
 }
-let surChaussee: ((p: XY) => boolean) | null = null;
-let inventaireArbres: Arbre[] = [];
-
-/** Un tronc ne peut être ni sur la chaussée ni dans un bâtiment : l'inventaire de la Ville est précis au mètre
- *  près, nos emprises aussi ; quand les deux se contredisent, on décale le tronc vers le point libre le plus
- *  proche (≤ 3 m, généralement le trottoir), sinon l'arbre est écarté. La couronne est taillée pour ne pas
- *  traverser les façades (taille architecturée des arbres d'alignement parisiens). */
-function corrigerArbres(liste: Arbre[]): Arbre[] {
-  const proches = (p: XY) => batiments.filter((b) => b.contour.some((q) => Math.abs(q.x - p.x) < 60 && Math.abs(q.y - p.y) < 60));
-  const libre = (p: XY, bs: Batiment[]) => !(surChaussee?.(p) ?? false) && !bs.some((b) => contient(b.contour, p));
-  const distMur = (p: XY, bs: Batiment[]) => {
-    let d = Infinity;
-    for (const b of bs)
-      for (let i = 0; i < b.contour.length; i++) {
-        const a = b.contour[i]!, c = b.contour[(i + 1) % b.contour.length]!;
-        const dx = c.x - a.x, dy = c.y - a.y, l2 = dx * dx + dy * dy || 1;
-        const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
-        d = Math.min(d, Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y));
-      }
-    return d;
-  };
-  const out: Arbre[] = [];
-  for (const a of liste) {
-    const bs = proches(a.p);
-    let p: XY | null = libre(a.p, bs) ? a.p : null;
-    for (let r = 0.5; !p && r <= 3; r += 0.5)
-      for (let k = 0; k < 16 && !p; k++) {
-        const q = { x: a.p.x + Math.cos((k / 16) * Math.PI * 2) * r, y: a.p.y + Math.sin((k / 16) * Math.PI * 2) * r };
-        if (libre(q, bs)) p = q;
-      }
-    if (!p) continue;
-    const rMax = Math.max(1.2, distMur(p, bs) + 0.4);
-    const rc = a.rayonCouronne.valeur > rMax ? { ...a.rayonCouronne, valeur: rMax, origine: a.rayonCouronne.origine + ' · taillée côté façade' } : a.rayonCouronne;
-    out.push({ ...a, p, rayonCouronne: rc });
-  }
-  return out;
-}
-
-/** Arbres : uniquement l'inventaire officiel de la ville (position, espèce, hauteur), corrigé par corrigerArbres. */
-function planterArbres(_couronnes: unknown, bbox: Terrain['bbox']) {
-  const dedans = (p: XY) => p.x > bbox[0] + 2 && p.x < bbox[2] - 2 && p.y > bbox[1] + 2 && p.y < bbox[3] - 2;
-  inventaireArbres = [];
+/** Arbres : uniquement l'inventaire officiel de la Ville de Paris (« Les arbres », open data),
+ *  positions, espèces et hauteurs telles que publiées. Aucune autre source, aucune correction. */
+function planterArbres(bbox: Terrain['bbox']) {
+  const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   afficherForet([]);
   const a = adresse!, { lon, lat } = a.position;
   if (lon < 2.2 || lon > 2.48 || lat < 48.8 || lat > 48.92) return; // inventaire disponible : Paris
@@ -716,8 +662,7 @@ function planterArbres(_couronnes: unknown, bbox: Terrain['bbox']) {
     .then((r) => (r.ok ? r.json() : []))
     .then((liste: ArbreParis[]) => {
       if (adresse !== a) return;
-      inventaireArbres = liste.map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la }))).filter((x): x is Arbre => !!x && dedans(x.p));
-      afficherForet(corrigerArbres(inventaireArbres));
+      afficherForet(liste.map((x) => depuisParis(x, (lo, la) => wgsVersL93({ lon: lo, lat: la }))).filter((x): x is Arbre => !!x && dedans(x.p)));
     })
     .catch(() => undefined);
 }
@@ -757,14 +702,12 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const zD = m.detail.bbox;
   for (const r of [relief, detail]) if (r) (r.geometry.dispose(), scene.remove(r));
   // Large zone à 1 m, creusée là où la zone de détail à 50 cm prend le relais.
-  // Arbres : couronnes mesurées dans le LiDAR (sommet, hauteur, rayon), puis le LiDAR végétation est ramené au sol
-  // (les arbres 3D, à feuillage saisonnier, le remplacent). L'inventaire de Paris ajoute l'espèce.
+  // Végétation du LiDAR ramenée au sol : les arbres viennent uniquement de l'inventaire de la Ville de Paris.
   const dansD = (p: XY) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3];
-  const couronnes = null;
   void dansD;
   aplanirVegetation(m);
   aplanirVegetation(m.detail);
-  planterArbres(couronnes, bbox);
+  planterArbres(bbox);
   relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
   const taches = tachesFacades(m.detail);
   (window as unknown as { __taches: unknown }).__taches = taches;
