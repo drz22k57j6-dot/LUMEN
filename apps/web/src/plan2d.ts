@@ -10,6 +10,8 @@ import {
   type Cote, type OuverturePlan, type PiecePlan, type Plan, type TypePiece,
 } from '@lumen/interior';
 
+import { lirePlan } from './lecturePlan';
+
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, html = '') => {
   const e = document.createElement(tag);
@@ -269,11 +271,53 @@ export function initPlan2D(opts: { voir3D?: (plan: Plan) => void } = {}) {
         c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
         c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
         chargerImage(c.toDataURL('image/jpeg', 0.8));
+        void lectureAuto(c);
       };
       img.src = lecteur.result as string;
     };
     lecteur.readAsDataURL(fichier);
   };
+  /** Reconstruit automatiquement les pièces, l'échelle et les fenêtres à partir de l'image. */
+  async function lectureAuto(c: HTMLCanvasElement) {
+    message = 'Lecture automatique du plan…';
+    dessiner();
+    try {
+      const r = await lirePlan(c, (t) => ((message = t), dessiner()));
+      while (!fond) await new Promise((res) => setTimeout(res, 50));
+      if (!r.pieces.length) {
+        message = 'Murs non reconnus : dessine les pièces sur le plan, puis règle l’échelle avec 📏.';
+        return dessiner();
+      }
+      const mpp = r.mpp ?? fond.mpp;
+      fond.mpp = mpp;
+      fond.x = 0;
+      fond.y = c.height * mpp;
+      const ids: string[] = [];
+      plan.pieces = r.pieces.map((p) => {
+        const id = nouvelId('p');
+        ids.push(id);
+        const piece: PiecePlan = { id, type: p.type, x: p.x0 * mpp, y: fond!.y - p.y1 * mpp, l: (p.x1 - p.x0) * mpp, p: (p.y1 - p.y0) * mpp, source: 'photo' };
+        if (p.nom) piece.nom = p.nom;
+        return piece;
+      });
+      plan.ouvertures = r.fenetres.map((f) => {
+        const p = r.pieces[f.piece]!;
+        const horiz = f.cote === 'haut' || f.cote === 'bas';
+        const cote = (f.debutPx + f.finPx) / 2;
+        const position = (horiz ? cote : p.y1 - p.y0 - cote) * mpp;
+        const largeur = Math.max(0.6, Math.min(3, (f.finPx - f.debutPx) * mpp));
+        return { id: nouvelId('o'), piece: ids[f.piece]!, cote: f.cote, position, type: 'fenetre' as const, ...ouvertureParDefaut('fenetre'), largeur, source: 'photo' as const };
+      });
+      stocker(cle, plan);
+      stockerFond();
+      ajusterFond();
+      message = `${plan.pieces.length} pièces et ${plan.ouvertures.length} fenêtres reconnues · échelle : ${r.methode}. Vérifie et corrige si besoin.`;
+    } catch (e) {
+      message = `Lecture automatique impossible (${(e as Error).message}). Dessine les pièces sur le plan.`;
+    }
+    dessiner();
+  }
+
   selOrient.onchange = () => {
     if (selOrient.value === '') delete plan.azimutBas; else plan.azimutBas = +selOrient.value;
     stocker(cle, plan);

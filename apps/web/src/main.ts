@@ -11,6 +11,7 @@ import { catalogueMonuments, chargerMonuments, emprisesMonuments, libererMonumen
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
 import { initStudio } from './studio3d';
+import { initCarte } from './carte2d';
 import { Habillage, styleDe, type TacheFacade } from './habillage';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -292,7 +293,7 @@ q.oninput = () => {
     for (const a of res) {
       const li = document.createElement('li');
       li.textContent = a.label;
-      li.onclick = () => charger(a);
+      li.onclick = () => choisirAdresse(a);
       sugg.append(li);
     }
   }, 220);
@@ -300,12 +301,54 @@ q.oninput = () => {
 $<HTMLFormElement>('recherche').onsubmit = async (e) => {
   e.preventDefault();
   const [a] = await geocoder(q.value, 1).catch(() => []);
-  if (a) charger(a);
+  if (a) choisirAdresse(a);
 };
 
 // ---------------------------------------------------------------------------
 // Chargement du quartier
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Parcours : carte 2D → immeuble confirmé → plan → 3D
+// ---------------------------------------------------------------------------
+let adresseCarte: Adresse | null = null;
+let batimentVise: Batiment | null = null;
+const carte = initCarte({
+  surSelection: (b) => {
+    batimentVise = b;
+    $<HTMLButtonElement>('ecOui').disabled = !b;
+    $('ecInfo').textContent = b
+      ? `${b.usage ?? b.nature ?? 'Bâtiment'} · ${b.hauteur.valeur.toFixed(0)} m${b.nbLogements ? ` · ${b.nbLogements} logement${b.nbLogements > 1 ? 's' : ''}` : ''}${b.nbEtages ? ` · ${b.nbEtages} étages` : ''}`
+      : 'Aucun bâtiment trouvé ici : touche l’immeuble sur la carte.';
+  },
+});
+function choisirAdresse(a: Adresse) {
+  sugg.innerHTML = '';
+  q.value = a.label;
+  q.blur();
+  if (!document.body.classList.contains('mode-carte')) return void charger(a);
+  adresseCarte = a;
+  $('accueil').hidden = true;
+  $('etapeCarte').hidden = false;
+  $('ecConfirmer').hidden = false;
+  $('ecPlan').hidden = true;
+  $('ecInfo').textContent = 'Recherche de l’immeuble…';
+  void carte.aller(a);
+}
+function passer3D() {
+  if (!adresseCarte) return;
+  document.body.classList.remove('mode-carte');
+  carte.montrer(false);
+  redim();
+  void charger(adresseCarte);
+}
+function retourCarte() {
+  document.body.classList.add('mode-carte');
+  carte.montrer(true);
+}
+$('ecOui').onclick = () => (($('ecConfirmer').hidden = true), ($('ecPlan').hidden = false));
+$('ec3D').onclick = passer3D;
+$('retourCarte').onclick = retourCarte;
+
 async function charger(a: Adresse) {
   clearTimeout(minuteur);
   sugg.innerHTML = '';
@@ -571,6 +614,11 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
 
   $('vueRue').hidden = false;
   entrerRue();
+  if (batimentVise) {
+    const bv = batimentVise;
+    const b2 = batiments.find((b) => b.id === bv.id);
+    if (b2) setTimeout(() => choisir(contient(b2.contour, adresse!.l93) ? adresse!.l93 : b2.contour[0]!), 0);
+  }
   majTrajet();
   majSoleil();
   $('accueil').hidden = true;
@@ -672,7 +720,7 @@ function majSelection() {
   const max = Math.max(0, Math.floor(b.hauteur.valeur / hE) - 1);
   $('etageTxt').textContent = etage === 0 ? 'RDC' : String(etage);
   $('infoBat').innerHTML =
-    `<b>${b.usage ?? b.nature ?? 'Bâtiment'}</b>${b.nbLogements ? ` · ${b.nbLogements} logements` : ''} · ${b.hauteur.valeur.toFixed(1)} m` +
+    `<b>${b.usage ?? b.nature ?? 'Bâtiment'}</b>${b.nbLogements ? ` · ${b.nbLogements} logement${b.nbLogements > 1 ? 's' : ''}` : ''} · ${b.hauteur.valeur.toFixed(1)} m` +
     ` <span class="doux">(${b.hauteur.source === 'mesure' ? `IGN, ±${b.hauteur.precision_m ?? '?'} m` : 'hauteur estimée'} · ~${max + 1} niveaux)</span>`;
   $('infoFacade').innerHTML = `Façade <b>${cardinal(f.azimut)}</b> (${f.azimut.toFixed(0)}°, déduit du cadastre IGN) · fenêtre à ${(z - pointFenetre().sol).toFixed(1)} m du sol (estimé)`;
   $('reglages').hidden = false;
@@ -770,6 +818,11 @@ function sortirRue() {
   regles(false);
   $('vueRue').hidden = false;
   entrerRue();
+  if (batimentVise) {
+    const bv = batimentVise;
+    const b2 = batiments.find((b) => b.id === bv.id);
+    if (b2) setTimeout(() => choisir(contient(b2.contour, adresse!.l93) ? adresse!.l93 : b2.contour[0]!), 0);
+  }
   $('vueRue').textContent = '🚶 Vue rue';
   majSoleil();
 }
@@ -961,6 +1014,12 @@ majSoleil();
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
 let studio: ReturnType<typeof initStudio> | null = null;
 const plan2d = initPlan2D({ voir3D: (p) => studio?.depuisPlan2D(p) });
+$('ecDessin').onclick = () => plan2d.ouvrir();
+$('ecImage').onclick = () => {
+  plan2d.ouvrir();
+  document.getElementById('edImport')?.click();
+};
+$('ecScan').onclick = () => studio?.ouvrir();
 studio = initStudio({ ouvrirPlan2D: () => plan2d.ouvrir() });
 $('monPlan').onclick = plan2d.ouvrir;
 $('studio3d').onclick = () => studio?.ouvrir();
