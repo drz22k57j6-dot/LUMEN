@@ -8,7 +8,6 @@ import { Code, directionSoleil, eclairement, positionSoleil } from '@lumen/analy
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
-import { arbresLidar, creerArbres, majSaison } from './arbres';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -207,16 +206,6 @@ function construireVoirie3D(v: Voirie) {
     }
     if (modifie) (pos.needsUpdate = true), r.geometry.computeVertexNormals();
   }
-  // Les arbres d'alignement, retirés du relief, sont reconstruits depuis le LiDAR (position et hauteur mesurées).
-  if (arbres) (scene.remove(arbres), arbres.traverse((o) => o instanceof THREE.Mesh && (o.geometry.dispose(), (o.material as THREE.Material).dispose())));
-  const zD = grilleDetail?.bbox;
-  const horsDetail = (p: XY) => !zD || p.x < zD[0] || p.x > zD[2] || p.y < zD[1] || p.y > zD[3];
-  const liste = [
-    ...(grilleDetail ? arbresLidar(grilleDetail, solB, dans) : []),
-    ...arbresLidar({ n: terrain.n, bbox: terrain.bbox, hauteurs: terrain.surf, classes: terrain.classes }, solB, (p) => dans(p) && horsDetail(p)),
-  ];
-  arbres = creerArbres(liste, (p, dz) => local(p, solB(p) + dz), dateCourante().getMonth());
-  scene.add(arbres);
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -280,7 +269,6 @@ function majSoleil() {
   soleil.target.position.copy(c);
   soleil.target.updateMatrixWorld();
   // Lumière calculée à travers l'atmosphère (packages/analysis/lumiere.ts), aucun réglage à l'œil.
-  if (arbres) majSaison(arbres, d.getMonth());
   const E = eclairement(s.elevation);
   const lin = THREE.LinearSRGBColorSpace;
   soleil.intensity = PAR_LUX * E.directNormal;
@@ -641,7 +629,6 @@ function planterArbres(couronnes: { p: XY; hauteur: number; rayon: number }[], b
 
 let detail: THREE.Mesh | null = null;
 let grilleDetail: Grille2 | null = null;
-let arbres: THREE.Group | null = null;
 let loin: THREE.Mesh | null = null;
 
 /** Zone lointaine (2 km) : LiDAR à 8 m + orthophoto, creusée sous la zone à 1 m. */
