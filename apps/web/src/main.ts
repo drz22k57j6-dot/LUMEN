@@ -14,6 +14,7 @@ import { creerSolUrbain, orthoSol } from './sol3d';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
+import { chargerTexturesSol, construireCarteSol, GLSL_SOL_CORPS, GLSL_SOL_DECL, uniformesSol, type CarteSol } from './sol';
 import { creerForet, type Foret } from './arbres3d';
 import { depuisParis, especeDuGenre, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
 import { initStudio } from './studio3d';
@@ -87,22 +88,31 @@ fondSol.rotation.x = -Math.PI / 2;
 fondSol.position.y = -2;
 scene.add(fondSol);
 
-// Matériau du relief : orthophoto sur les surfaces horizontales, couleur de classe sur les murs.
+// Matériau du relief : sol reconstruit en matières réelles dans la zone détaillée (sol.ts : CoSIA + OSM +
+// matières photo CC0), orthophoto ailleurs et sur les toits, couleur de classe sur les murs.
 const uniformes = { uPhoto: { value: 1 } };
 function creerMatRelief() {
 const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.3 });
 matRelief.onBeforeCompile = (s) => {
   s.uniforms.uPhoto = uniformes.uPhoto;
+  Object.assign(s.uniforms, uniformesSol);
+  s.vertexShader = s.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vWpSol;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWpSol = (modelMatrix * vec4(transformed, 1.0)).xyz;');
   s.fragmentShader = s.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uPhoto;')
+    .replace('#include <common>', '#include <common>\nuniform float uPhoto;' + GLSL_SOL_DECL)
     .replace('#include <map_fragment>', '#ifdef USE_MAP\n vec3 photo = texture2D(map, vMapUv).rgb;\n#else\n vec3 photo = vec3(1.0);\n#endif')
     .replace('#include <color_fragment>', '')
     .replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
        float haut = inverseTransformDirection(normal, viewMatrix).y;
-       vec3 dessus = mix(vColor * 1.08, photo, uPhoto);
-       diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));`,
+       ${GLSL_SOL_CORPS}
+       float solici = solMasque * smoothstep(0.75, 0.92, haut) * uPhoto;
+       vec3 dessus = mix(vColor * 1.08, mix(photo, solCoul, solici), uPhoto);
+       diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));
+       roughnessFactor = mix(roughnessFactor, solRug, solici);
+       normal = normalize(mix(normal, (viewMatrix * vec4(solN, 0.0)).xyz, solici));`,
     );
 };
 return matRelief;
@@ -448,6 +458,7 @@ $('ec3D').onclick = passer3D;
 $('retourCarte').onclick = retourCarte;
 
 async function charger(a: Adresse) {
+  uniformesSol.uSol.value = 0; // le sol de l'adresse précédente ne doit pas s'afficher ici
   clearTimeout(minuteur);
   sugg.innerHTML = '';
   q.value = a.label;
@@ -667,6 +678,37 @@ function planterArbres(bbox: Terrain['bbox']) {
     .catch(() => undefined);
 }
 
+// ---------------------------------------------------------------------------
+// Sol reconstruit (sol.ts) : remplace la photo aérienne au sol dans la zone détaillée
+// ---------------------------------------------------------------------------
+let texturesSol: ReturnType<typeof chargerTexturesSol> | null = null;
+let carteSol: CarteSol | null = null;
+function chargerSol(bbox: Terrain['bbox']) {
+  const a = adresse!;
+  texturesSol ??= chargerTexturesSol(`${import.meta.env.BASE_URL}tex/sol/`, mobile ? 512 : 1024).then((t) => {
+    uniformesSol.uSolCoul.value = t.couleur;
+    uniformesSol.uSolNor.value = t.normale;
+    uniformesSol.uSolEch.value = t.echelles;
+    return t;
+  });
+  Promise.all([texturesSol, construireCarteSol(bbox, mobile ? 0.75 : 0.5, (x, y) => versWgs84({ x, y }), (lon, lat) => wgsVersL93({ lon, lat }))])
+    .then(([, c]) => {
+      if (adresse !== a) return (c.a.dispose(), c.b.dispose());
+      if (carteSol) (carteSol.a.dispose(), carteSol.b.dispose());
+      carteSol = c;
+      const t = bbox[2] - bbox[0];
+      uniformesSol.uSolA.value = c.a;
+      uniformesSol.uSolB.value = c.b;
+      uniformesSol.uSolBox.value.set(bbox[0] - a.l93.x, -(bbox[3] - a.l93.y), t, t);
+      uniformesSol.uSolTexel.value = 1 / c.n;
+      uniformesSol.uSol.value = 1;
+    })
+    .catch((e) => {
+      uniformesSol.uSol.value = 0; // repli : photo aérienne
+      console.warn('sol reconstruit indisponible', e);
+    });
+}
+
 let detail: THREE.Mesh | null = null;
 let loin: THREE.Mesh | null = null;
 
@@ -710,13 +752,16 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   planterArbres(bbox);
   relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1);
   const taches = tachesFacades(m.detail);
-  (window as unknown as { __taches: unknown }).__taches = taches;
   abaisserSousFacades(m.detail, taches);
   nettoyerBords(m.detail);
   detail = maillage(m.detail, bbox);
   scene.add(relief, detail);
   habillage.lancer(taches);
-  fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
+  // Fond sous tout le relief : sous le point le plus bas de la zone (sinon, en terrain en pente, il recouvre
+  // les parties basses — ex. jardin du Luxembourg plus bas que la rue).
+  let zMin = Infinity;
+  for (let i = 0; i < m.hauteurs.length; i += 7) zMin = Math.min(zMin, m.hauteurs[i]!);
+  fondSol.position.y = zMin - alt0 - 3;
 
   // Murs des immeubles
   const geos: THREE.BufferGeometry[] = [];
@@ -774,6 +819,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   // Voirie (chaussée, trottoirs, bordures, marquages), calculée dans le worker.
   if (troncons.length) envoyer({ type: 'voirie', troncons, batiments, emprise: bbox });
 
+  chargerSol(bbox);
   // Orthophoto IGN (~30 cm), décodée hors du fil principal.
   const indic = $('modePhoto');
   indic.textContent = 'Photo…';
@@ -1201,7 +1247,7 @@ majTrajet();
 majSoleil();
 
 // Diagnostic (tests automatisés) — exposé seulement en mode développeur (voir plus bas)
-const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+const diagnostic = { calques: () => scene.children.map((o, i) => [i, o.name || o.type, (o as THREE.Mesh).material && ((o as THREE.Mesh).material as THREE.Material).type, Math.round(o.position.y)]), cacher: (i: number) => (scene.children[i]!.visible = false), sol: () => carteSol && { stats: carteSol.stats, n: carteSol.n, src: carteSol.sources, u: uniformesSol.uSol.value, tex: !!uniformesSol.uSolCoul.value, moy: (() => { const t = uniformesSol.uSolCoul.value; if (!t) return null; const d = t.image.data as Uint8Array, L = t.image.depth, px = d.length / 4 / L; return Array.from({ length: L }, (_, k) => { let s = 0; for (let i = 0; i < px; i += 97) s += d[(k * px + i) * 4]!; return Math.round(s / (px / 97)); }); })() }, bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
