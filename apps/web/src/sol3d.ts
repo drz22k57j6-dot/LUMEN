@@ -69,7 +69,7 @@ function materiau(): THREE.MeshStandardMaterial {
           pave = mix(pave, vec3(0.05, 0.048, 0.045), joint * 0.85) * (0.85 + 0.3 * vn(w * 0.3));
           // pelouse : touffes, brins, terre visible par endroits
           float t1 = vn(w * 1.3), t2 = vn(w * 11.0), t3 = vn(w * 47.0);
-          vec3 herbe = mix(vec3(0.045, 0.075, 0.018), vec3(0.11, 0.15, 0.04), 0.5 * t1 + 0.5 * t2) * (0.8 + 0.4 * t3);
+          vec3 herbe = mix(vec3(0.055, 0.1, 0.022), vec3(0.1, 0.18, 0.04), 0.5 * t1 + 0.5 * t2) * (0.8 + 0.4 * t3); // même albédo que les brins (herbe.ts)
           herbe = mix(herbe, vec3(0.1, 0.08, 0.05), smoothstep(0.75, 0.9, vn(w * 0.7)) * 0.5);
           // allée stabilisée (sable de parc)
           vec3 sab = vec3(0.4, 0.35, 0.26) * (0.8 + 0.35 * vn(w * 23.0)) * (0.9 + 0.2 * vn(w * 0.8));

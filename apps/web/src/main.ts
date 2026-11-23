@@ -11,6 +11,7 @@ import { Nuages, transmission } from './ciel/nuages';
 import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, type Troncon, type Voirie } from '@lumen/urban';
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { creerSolUrbain, orthoSol } from './sol3d';
+import { creerHerbe, masqueHerbe, type Herbe } from './herbe';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
@@ -163,6 +164,19 @@ let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
 let solUrbain: THREE.Mesh | null = null;
+let herbe: Herbe | null = null;
+let orthoProche: ImageBitmap | null = null;
+let garderHerbe: ((p: XY) => boolean) | null = null;
+
+/** Herbe 3D : dès que l'orthophoto et la voirie (masques) sont prêtes. */
+function tenterHerbe() {
+  if (herbe) (scene.remove(herbe.groupe), herbe.liberer(), (herbe = null));
+  if (!terrain || !orthoProche || !garderHerbe || !adresse) return;
+  const { masque, n } = masqueHerbe(orthoProche, terrain.bbox, garderHerbe);
+  herbe = creerHerbe({ bbox: terrain.bbox, masque, nMasque: n, mnt: terrain.mnt, nT: terrain.nT, origine: adresse.l93, alt0, mobile });
+  scene.add(herbe.groupe);
+  majSoleil();
+}
 let monuments: Monument[] = [];
 let groupeMonuments: THREE.Group | null = null;
 let terrain: Terrain | null = null;
@@ -229,6 +243,8 @@ function construireVoirie3D(v: Voirie) {
     mobile,
   });
   scene.add(solUrbain);
+  garderHerbe = (p) => !dans(p) && classe(p) !== 1;
+  tenterHerbe();
 }
 
 /** Altitude de la surface LiDAR (1 m) en un point. */
@@ -331,6 +347,7 @@ function majSoleil() {
   }
   {
     const dir = new THREE.Vector3(x, y, z);
+    herbe?.soleil(dir, soleil.color.clone().multiplyScalar(soleil.intensity), d.getMonth());
     const cs = new THREE.Color().setRGB(...E.couleurSoleil, lin).multiplyScalar(PAR_LUX * E.directNormal * 0.35 + 1e-4);
     const ch = new THREE.Color().setRGB(...E.couleurCiel, lin).multiplyScalar(PAR_LUX * E.diffusHorizontal * 1.2 * (0.6 + 0.4 * tr.diffus));
     const cb = ch.clone().multiplyScalar(0.55);
@@ -777,10 +794,14 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   // Orthophoto IGN (~30 cm), décodée hors du fil principal.
   const indic = $('modePhoto');
   indic.textContent = 'Photo…';
+  orthoProche = null;
+  garderHerbe = null;
   fetch(urlWms(COUCHES.ortho, bbox, 2048, 2048, 'image/jpeg'))
     .then((r) => r.blob())
     .then((b) => createImageBitmap(b))
     .then((img) => {
+      orthoProche = img;
+      tenterHerbe();
       const t = new THREE.Texture(img);
       t.flipY = false;
       t.colorSpace = THREE.SRGBColorSpace;
@@ -1172,6 +1193,7 @@ controls.addEventListener('start', () => (interaction = true));
 controls.addEventListener('end', () => (interaction = false));
 let dureeHab = 0;
 renderer.setAnimationLoop((t) => {
+  herbe?.maj(camera, t);
   ciel.position.copy(camera.position);
   if (document.body.classList.contains('studio')) return; // le Studio 3D a son propre rendu
   const dt = Math.min(0.1, (t - avant) / 1000);
