@@ -13,6 +13,7 @@ import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { creerSolUrbain, orthoSol } from './sol3d';
 import { adressesAutour, creerPlaques, type AdresseBan, type PanFacade } from './plaques';
 import { creerHerbe, masqueHerbe, type Herbe } from './herbe';
+import { photosRue, type PhotoRue } from './photofacades';
 import { carteLumiere, creerLampadaires, equiperScene, lampesAllumees, lampesGenerees, lampesParis, partFenetres, U as UN, type Lampe } from './nuit';
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
@@ -607,7 +608,8 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
   const dans = (p: XY) => p.x > zone[0] + 8 && p.x < zone[2] - 8 && p.y > zone[1] + 8 && p.y < zone[3] - 8;
   for (const b of batiments) {
     if (!b.contour.every(dans) || b.hauteur.valeur < 4 || remplace(monuments, b)) continue;
-    const style = styleDe(b.id, b.hauteur.valeur);
+    // expérimental (?facades=photo) : façades réelles Panoramax pour les immeubles non haussmanniens
+    const style = MODE_PHOTO && !estHaussmannien(b, zB) ? 'photo' : styleDe(b.id, b.hauteur.valeur);
     b.contour.forEach((p, i) => {
       const q2 = b.contour[(i + 1) % b.contour.length]!;
       const L = Math.hypot(q2.x - p.x, q2.y - p.y);
@@ -653,6 +655,89 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
     });
   }
   return t.sort((u, v) => u.d - v.d);
+}
+
+/**
+ * Immeuble haussmannien ? Critères mesurés : nature et usage IGN (logement / indifférencié), hauteur
+ * 12–26 m, et toit en pente (mansarde) au LiDAR : écart ≥ 2 m entre le haut et le bas du toit.
+ * Sinon (tours, bureaux, équipements, bâti ancien bas, industriel, églises…) : façade réelle en photo.
+ */
+function estHaussmannien(b: Batiment, zB: (x: number, y: number) => number): boolean {
+  const h = b.hauteur.valeur;
+  if (h < 12 || h > 26) return false;
+  if (b.nature && !/indiff/i.test(b.nature)) return false;
+  if (b.usage && !/résidentiel|residentiel|indiff/i.test(b.usage)) return false;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of b.contour) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  const pas = Math.max(1, Math.sqrt(((x1 - x0) * (y1 - y0)) / 300));
+  const hs: number[] = [];
+  for (let x = x0 + pas / 2; x < x1; x += pas)
+    for (let y = y0 + pas / 2; y < y1; y += pas) {
+      const z = zB(x, y);
+      if (Number.isFinite(z) && contient(b.contour, { x, y })) hs.push(z);
+    }
+  if (hs.length < 8) return true;
+  hs.sort((a, c) => a - c);
+  return hs[Math.floor(hs.length * 0.9)]! - hs[Math.floor(hs.length * 0.25)]! >= 2;
+}
+
+const MODE_PHOTO = new URLSearchParams(location.search).get('facades') === 'photo';
+let groupePhotos: THREE.Group | null = null;
+let travailPhotos: Worker | null = null;
+/** Façades réelles (Panoramax) des immeubles non haussmanniens, cuites dans un worker. */
+async function lancerPhotos(tp: TacheFacade[]) {
+  travailPhotos?.terminate();
+  travailPhotos = null;
+  if (groupePhotos) (scene.remove(groupePhotos), groupePhotos.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) (m.geometry.dispose(), (m.material as THREE.MeshStandardMaterial).map?.dispose(), (m.material as THREE.Material).dispose()); }), (groupePhotos = null));
+  $('photosTxt').textContent = '';
+  if (!tp.length || !adresse) return;
+  const ici = adresse;
+  const sc = (p: XY) => { const l = local(p, 0); return { x: l.x, z: l.z }; };
+  const photos = await photosRue(ici.position, 190, sc, (p) => solA(p) - alt0).catch(() => [] as PhotoRue[]);
+  if (adresse !== ici) return;
+  if (!photos.length) return void ($('photosTxt').textContent = ' · Photos de rue Panoramax indisponibles');
+  const index = new Map(batiments.map((b, i) => [b.id, i]));
+  const taches = tp.map((t) => ({ a: t.a, b: t.b, y: t.y, hGout: t.hGout, bat: index.get(t.id.split(':')[0]!) ?? -1 }));
+  const batis = batiments.map((b) => ({ contour: b.contour.map(sc) }));
+  const w = new Worker(new URL('./photos.worker.ts', import.meta.url), { type: 'module' });
+  travailPhotos = w;
+  w.onmessage = (e: MessageEvent<{ type: string; f?: number; atlas?: { data: Uint8ClampedArray; cote: number; pos: Float32Array; uv: Float32Array }[]; couverture?: number; auteurs?: string[] }>) => {
+    const m = e.data;
+    if (adresse !== ici) return w.terminate();
+    if (m.type === 'progres') return void ($('photosTxt').textContent = ` · Façades réelles ${Math.round(m.f! * 100)} %`);
+    w.terminate();
+    if (travailPhotos === w) travailPhotos = null;
+    if (m.type !== 'fini') return void ($('photosTxt').textContent = ' · Façades réelles : échec');
+    const g = new THREE.Group();
+    g.name = 'facades_photos';
+    for (const a of m.atlas!) {
+      if (!a.pos.length) continue;
+      const tex = new THREE.DataTexture(a.data as Uint8ClampedArray<ArrayBuffer>, a.cote, a.cote, THREE.RGBAFormat);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.anisotropy = mobile ? 4 : 8;
+      tex.needsUpdate = true;
+      const uv = a.uv.map((v, i) => (i % 2 ? 1 - v : v)); // ligne 0 des données = haut de la façade
+      const n = a.pos.length / 12, idx: number[] = [];
+      for (let q = 0; q < n; q++) idx.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(a.pos, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: THREE.DoubleSide }));
+      mesh.castShadow = mesh.receiveShadow = true;
+      g.add(mesh);
+    }
+    groupePhotos = g;
+    scene.add(g);
+    equiperScene(scene);
+    const au = m.auteurs!;
+    $('photosTxt').textContent = ` · ${tp.length} façades non haussmanniennes en photo réelle (${Math.round(m.couverture! * 100)} % couverts) — Panoramax CC BY-SA : ${au.slice(0, 4).join(', ')}${au.length > 4 ? '…' : ''}`;
+  };
+  w.postMessage({ taches, batis, photos, mobile });
 }
 
 /** Ajuste le LiDAR autour des façades : sol juste derrière la façade (rien ne passe devant),
@@ -853,7 +938,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   nettoyerBords(m.detail);
   detail = maillage(m.detail, bbox, undefined, matRelief, true);
   scene.add(relief, detail);
-  habillage.lancer(taches);
+  habillage.lancer(taches.filter((t) => t.style !== 'photo'));
+  void lancerPhotos(taches.filter((t) => t.style === 'photo'));
   void poserPlaques(taches, zD);
   fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
 

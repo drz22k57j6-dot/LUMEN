@@ -18,7 +18,8 @@ export interface TacheFacade {
   b: [number, number];
   y: number;
   hGout: number;
-  style: 'riche' | 'classique' | 'modeste' | 'moderne';
+  /** « photo » : immeuble non haussmannien, façade réelle (photos de rue), voir photofacades.ts */
+  style: 'riche' | 'classique' | 'modeste' | 'moderne' | 'photo';
   lod: 0 | 1;
 }
 
