@@ -192,7 +192,7 @@ export function creerHerbe(P: ParamsHerbe): Herbe {
   const groupe = new THREE.Group();
   groupe.name = 'herbe';
   const mats: THREE.MeshStandardMaterial[] = [];
-  const geos: THREE.BufferGeometry[] = [];
+  const geos: THREE.InstancedBufferGeometry[] = [];
   const totaux: number[] = [];
   let facteur = 1;
   anneaux.forEach((a, k) => {
