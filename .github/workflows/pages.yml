@@ -25,6 +25,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build
+        env:
+          VITE_MODE_DEV: '1' # mode développeur (temporaire) : mettre '0' ou supprimer cette ligne pour le retirer du site
       - uses: actions/configure-pages@v5
         with: { enablement: true }
       - uses: actions/upload-pages-artifact@v3

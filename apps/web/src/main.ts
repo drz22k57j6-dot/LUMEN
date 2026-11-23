@@ -1007,8 +1007,8 @@ renderer.setAnimationLoop((t) => {
 majTrajet();
 majSoleil();
 
-// Diagnostic (tests automatisés)
-(window as unknown as { __lumen: unknown }).__lumen = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+// Diagnostic (tests automatisés) — exposé seulement en mode développeur (voir plus bas)
+const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
@@ -1023,6 +1023,18 @@ $('ecScan').onclick = () => studio?.ouvrir();
 studio = initStudio({ ouvrirPlan2D: () => plan2d.ouvrir() });
 $('monPlan').onclick = plan2d.ouvrir;
 $('studio3d').onclick = () => studio?.ouvrir();
+
+// Mode développeur (temporaire) : présent seulement si le site est construit avec VITE_MODE_DEV=1.
+// Sans ce réglage, cette branche et tout le dossier src/dev/ disparaissent du site publié.
+if (import.meta.env.VITE_MODE_DEV === '1')
+  void import('./dev/panneau').then((m) =>
+    m.installerModeDev({
+      scene, camera, renderer, controls, charger: (a) => charger(a),
+      ouvrirStudio: () => studio?.ouvrir(), ouvrirPlan: () => plan2d.ouvrir(),
+      etat: () => ({ adresse: adresse?.label, batiments: batiments.length, troncons: troncons.length, monuments: monuments.length, etage, selection: selBat?.id ?? null, facade: facade?.azimut ?? null }),
+      diagnostic,
+    }),
+  );
 
 // Erreurs visibles (diagnostic sur téléphone)
 const toast = (t: string) => {
