@@ -25,6 +25,7 @@ export interface ContexteDev {
   carte2D: () => void;
   ouvrirStudio: () => void;
   ouvrirPlan: () => void;
+  drone: () => void;
   etat: () => Record<string, unknown>;
   diagnostic: Record<string, unknown>;
 }
@@ -65,7 +66,7 @@ export function installerModeDev(ctx: ContexteDev) {
   p.innerHTML = `
     <b>Mode développeur</b> <span style="color:#999">— temporaire, retiré au lancement</span>
     <h4>Accès</h4>
-    <div class="rang"><button data-a="studio">🧊 Studio 3D</button><button data-a="plan">▦ Plan 2D</button><button data-a="haut">⬆ Vue de haut</button><button data-a="libre">🎥 Caméra libre</button></div>
+    <div class="rang"><button data-a="studio">🧊 Studio 3D</button><button data-a="plan">▦ Plan 2D</button><button data-a="haut">⬆ Vue de haut</button><button data-a="libre">🎥 Caméra libre</button><button data-a="drone">🚁 Drone</button></div>
     <h4>Monde 3D — rechercher une adresse</h4>
     <div class="rang" style="flex-wrap:nowrap"><input id="devAdresse" type="text" placeholder="Ex. 12 rue de Rivoli Paris" autocomplete="off" /><button data-a="chercher">🔍</button></div>
     <div id="devSugg"></div>
@@ -95,6 +96,7 @@ export function installerModeDev(ctx: ContexteDev) {
       c.minDistance = 0.5; c.maxDistance = 20000; c.maxPolarAngle = Math.PI; c.enablePan = true;
       c.screenSpacePanning = true;
     },
+    drone: () => { p.hidden = true; ctx.drone(); },
     chercher: () => void chercher($<HTMLInputElement>('#devAdresse').value, true),
     carte: () => { p.hidden = true; ctx.carte2D(); },
     copier: () => { void navigator.clipboard?.writeText(JSON.stringify(ctx.etat(), null, 2)).catch(() => undefined); },

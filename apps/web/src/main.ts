@@ -1107,7 +1107,6 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   chargement(null);
 
   $('vueRue').hidden = false;
-  $('drone').hidden = false;
   if (drone.actif && poseDrone) {
     // rechargement autour du drone : il reste en vol, à la même position réelle
     drone.poser(local(poseDrone.p, poseDrone.alt));
@@ -1545,7 +1544,6 @@ const drone = initDrone({
     void charger({ label: `🚁 Drone · ${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}`, position: pos, l93: p, idBan: '' });
   },
 });
-$('drone').onclick = () => drone.basculer(true);
 
 // Diagnostic (tests automatisés) — exposé seulement en mode développeur (voir plus bas)
 const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
@@ -1574,6 +1572,7 @@ if (import.meta.env.VITE_MODE_DEV === '1')
       charger: (a) => { document.body.classList.remove('mode-carte'); carte.montrer(false); $('accueil').hidden = true; $('etapeCarte').hidden = true; redim(); return charger(a); },
       carte2D: () => retourCarte(),
       ouvrirStudio: () => studio?.ouvrir(), ouvrirPlan: () => plan2d.ouvrir(),
+      drone: () => drone.basculer(true),
       etat: () => ({ adresse: adresse?.label, batiments: batiments.length, troncons: troncons.length, monuments: monuments.length, etage, selection: selBat?.id ?? null, facade: facade?.azimut ?? null }),
       diagnostic,
     }),
