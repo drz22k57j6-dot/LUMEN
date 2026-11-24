@@ -7,7 +7,7 @@
 //    jusqu'à la gouttière des façades voisines.
 import * as THREE from 'three';
 import type { XY } from '@lumen/core';
-import type { TacheFacade } from './facadesNeutres';
+import type { TacheFacade } from './facades/mesher';
 
 export interface GrilleBrute {
   n: number;

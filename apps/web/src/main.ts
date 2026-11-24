@@ -23,7 +23,7 @@ import { creerForet, type Foret } from './arbres3d';
 import { depuisParis, especeDuGenre, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
 import { initStudio } from './studio3d';
 import { initCarte } from './carte2d';
-import { creerFacadesNeutres, type TacheFacade } from './facadesNeutres';
+import { MoteurFacades, type TacheFacade } from './facades/mesher';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -658,6 +658,17 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
   const dans = (p: XY) => p.x > zone[0] + 8 && p.x < zone[2] - 8 && p.y > zone[1] + 8 && p.y < zone[3] - 8;
   for (const b of batiments) {
     if (!b.contour.every(dans) || b.hauteur.valeur < 4 || remplace(monuments, b)) continue;
+    // Haut du toit (LiDAR, 90e centile dans l'emprise) : mansarde ⇔ ≥ 2 m au-dessus de la gouttière
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of b.contour) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+    const pasT = Math.max(0.5, Math.sqrt(((x1 - x0) * (y1 - y0)) / 400)), zs: number[] = [];
+    for (let x = x0 + pasT / 2; x < x1; x += pasT)
+      for (let y = y0 + pasT / 2; y < y1; y += pasT) {
+        const z = zB(x, y);
+        if (Number.isFinite(z) && contient(b.contour, { x, y })) zs.push(z);
+      }
+    zs.sort((u, v) => u - v);
+    const zToit = zs.length >= 6 ? zs[Math.floor(zs.length * 0.9)]! : NaN;
     b.contour.forEach((p, i) => {
       const q2 = b.contour[(i + 1) % b.contour.length]!;
       const L = Math.hypot(q2.x - p.x, q2.y - p.y);
@@ -707,7 +718,8 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
       // Rue ou cour : espace dégagé sur au moins 5 m devant la façade.
       if (Math.max(zB(m2.x + nrm.x * 4, m2.y + nrm.y * 4), zB(m2.x + nrm.x * 5.5, m2.y + nrm.y * 5.5)) > gout - 2) return;
       const la = local(A2, 0), lb = local(B2, 0);
-      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist });
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist,
+        bat: { hHaut: Number.isFinite(zToit) ? Math.max(gout, zToit) - base : undefined, annee: b.annee, nbEtages: b.nbEtages, murs: b.murs, usage: b.usage, nature: b.nature, hauteurBat: b.hauteur.valeur } });
     });
   }
   return t.sort((u, v) => u.d - v.d);
@@ -887,7 +899,8 @@ function construireLoin(m: Grille2) {
     })
     .catch(() => {});
 }
-const habillage = new THREE.Group();
+const moteurFacades = new MoteurFacades(renderer.capabilities.getMaxAnisotropy());
+const habillage = moteurFacades.groupe;
 scene.add(habillage);
 
 function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couverture: number; detail: Grille2 & { brut: Float32Array } }) {
@@ -911,9 +924,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   nettoyerBords(m.detail);
   detail = maillage(m.detail, bbox, undefined, matRelief, true);
   scene.add(relief, detail);
-  habillage.clear().traverse((o) => (o as THREE.Mesh).geometry?.dispose());
-  const fn = creerFacadesNeutres(taches);
-  if (fn) habillage.add(fn);
+  moteurFacades.lancer(taches);
   void poserPlaques(taches, zD);
   if (toits) (scene.remove(toits), toits.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
   const o = adresse!.l93;
@@ -1407,7 +1418,12 @@ renderer.setAnimationLoop((t) => {
     heure.value = String((+heure.value + dt * 90) % 1440);
     majSoleil();
   }
-  $('facadesTxt').hidden = true;
+  moteurFacades.etape(interaction ? (mobile ? 6 : 10) : mobile ? 22 : 30);
+  {
+    const p = moteurFacades.progression, ft = $('facadesTxt');
+    ft.hidden = p >= 1;
+    if (p < 1) ft.textContent = `Façades ${Math.round(p * 100)} %`;
+  }
   drone.maj(dt);
   if (!drone.actif) controls.update();
   {
@@ -1447,7 +1463,7 @@ const drone = initDrone({
 });
 
 // Diagnostic (tests automatisés) — exposé seulement en mode développeur (voir plus bas)
-const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ meshes: habillage.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
+const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), vue: () => [camera.position.toArray(), controls.target.toArray()], hab: () => ({ ...moteurFacades.stats, p: moteurFacades.progression }), specs: () => moteurFacades.specs, facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
 
 // Étape 1 : plan 2D du logement (indépendant de la 3D).
 // Studio 3D : appartement 3D depuis plusieurs sources (plan 2D, RoomPlan, scan 3D, DXF).
