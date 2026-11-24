@@ -743,7 +743,7 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
       // Rue ou cour : espace dégagé sur au moins 5 m devant la façade.
       if (Math.max(zB(m2.x + nrm.x * 4, m2.y + nrm.y * 4), zB(m2.x + nrm.x * 5.5, m2.y + nrm.y * 5.5)) > gout - 2) return;
       const la = local(A2, 0), lb = local(B2, 0);
-      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist,
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 35 : 70) ? 0 : dist < (mobile ? 85 : 130) ? 1 : 2, d: dist,
         bat: { hHaut: Number.isFinite(zToit) ? Math.max(gout, zToit) - base : undefined, annee: b.annee, nbEtages: b.nbEtages, murs: b.murs, usage: b.usage, nature: b.nature, hauteurBat: b.hauteur.valeur } });
     });
   }
