@@ -18,6 +18,7 @@ import { carteLumiere, creerLampadaires, equiperScene, lampesAllumees, lampesGen
 import { catalogueMonuments, chargerMonuments, emprisesMonuments, empreinteModeles, libererMonuments, monumentsDans, remplace, type Monument } from './monuments';
 import type { Requete } from './worker';
 import { initPlan2D } from './plan2d';
+import { initDrone } from './drone';
 import { creerForet, type Foret } from './arbres3d';
 import { depuisParis, especeDuGenre, urlArbresParis, type Arbre, type ArbreParis } from '@lumen/vegetation';
 import { initStudio } from './studio3d';
@@ -646,12 +647,20 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
       const dec = mediane(decalages), gout = mediane(gouttieres);
       const A2 = { x: A.x + nrm.x * dec, y: A.y + nrm.y * dec }, B2 = { x: B.x + nrm.x * dec, y: B.y + nrm.y * dec };
       const m2 = { x: m.x + nrm.x * dec, y: m.y + nrm.y * dec };
-      const base = solA({ x: m2.x + nrm.x * 1.5, y: m2.y + nrm.y * 1.5 });
+      // Profil du trottoir le long de toute la façade (MNT interpolé, tous les mètres) : en rue en pente,
+      // le rez-de-chaussée est posé au point le plus haut (le sol ne peut jamais monter aux fenêtres)
+      // et un soubassement en pierre rattrape la pente jusqu'au point le plus bas, comme à Paris.
+      const Lf = Math.hypot(B2.x - A2.x, B2.y - A2.y), profil: number[] = [];
+      for (let s3 = 0; s3 <= Lf + 1e-6; s3 += Math.max(0.5, Lf / Math.ceil(Lf))) {
+        const f = s3 / Lf;
+        profil.push(solB({ x: A2.x + (B2.x - A2.x) * f + nrm.x * 1.5, y: A2.y + (B2.y - A2.y) * f + nrm.y * 1.5 }));
+      }
+      const base = Math.max(...profil), socle = base - Math.min(...profil);
       if (gout - base < 3) return;
       // Rue ou cour : espace dégagé sur au moins 5 m devant la façade.
       if (Math.max(zB(m2.x + nrm.x * 4, m2.y + nrm.y * 4), zB(m2.x + nrm.x * 5.5, m2.y + nrm.y * 5.5)) > gout - 2) return;
       const la = local(A2, 0), lb = local(B2, 0);
-      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, hGout: gout - base, style, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist });
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, style, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist });
     });
   }
   return t.sort((u, v) => u.d - v.d);
@@ -951,14 +960,17 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
     // Zone de détail : les façades générées sont posées sur la vraie ligne du mur ; les murs IGN, rentrés de 0,8 m,
     // ferment les côtés non habillés (cours, pignons, façades pas encore générées) au lieu du rideau LiDAR.
     const enDetail = b.contour.every((p) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3]);
-    const cx = b.contour.reduce((s, p) => s + p.x, 0) / b.contour.length, cy = b.contour.reduce((s, p) => s + p.y, 0) / b.contour.length;
-    const base = solA({ x: cx, y: cy });
+    // Sol tout autour du bâtiment (sommets et milieux des murs) : le 1er étage part du point le plus HAUT,
+    // le mur descend jusqu'au point le plus bas (soubassement plein) → en pente, le sol ne cache jamais une fenêtre.
+    const autour: number[] = [];
+    b.contour.forEach((p, k) => { const q = b.contour[(k + 1) % b.contour.length]!; autour.push(solB(p), solB({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 })); });
+    const zHaut = Math.max(...autour), base = Math.min(...autour) - 0.5;
     const contour = enDetail ? rentrer(b.contour, 0.8) : b.contour;
     const forme = new THREE.Shape(contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
     const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, b.altitudeSol.valeur + b.hauteur.valeur - base - 0.6), bevelEnabled: false });
     // v des murs = hauteur depuis le sol (m)
     const uvA = g.attributes.uv as THREE.BufferAttribute, posA = g.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < uvA.count; i++) uvA.setY(i, posA.getZ(i));
+    for (let i = 0; i < uvA.count; i++) uvA.setY(i, posA.getZ(i) - (zHaut - base));
     g.rotateX(-Math.PI / 2);
     g.translate(0, base - alt0, 0);
     let h = 0;
@@ -1028,7 +1040,13 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   chargement(null);
 
   $('vueRue').hidden = false;
-  entrerRue();
+  $('drone').hidden = false;
+  if (drone.actif && poseDrone) {
+    // rechargement autour du drone : il reste en vol, à la même position réelle
+    drone.poser(local(poseDrone.p, poseDrone.alt));
+    poseDrone = null;
+  } else entrerRue();
+  rechargeDrone = false;
   if (batimentVise) {
     const bv = batimentVise;
     const b2 = batiments.find((b) => b.id === bv.id);
@@ -1423,7 +1441,8 @@ renderer.setAnimationLoop((t) => {
   const ft = $('facadesTxt');
   ft.hidden = p >= 1;
   if (p < 1) ft.textContent = `Façades ${Math.round(p * 100)} %`;
-  controls.update();
+  drone.maj(dt);
+  if (!drone.actif) controls.update();
   {
     const dC = dateCourante();
     const sec = (dC.getTime() % 864e5) / 1000;
@@ -1435,6 +1454,31 @@ renderer.setAnimationLoop((t) => {
 });
 majTrajet();
 majSoleil();
+
+// ---------------------------------------------------------------------------
+// Drone : vol libre, le quartier se recharge autour de lui
+// ---------------------------------------------------------------------------
+let poseDrone: { p: XY; alt: number } | null = null;
+let rechargeDrone = false, debutRecharge = 0;
+const drone = initDrone({
+  camera, controls, canvas: renderer.domElement, rayon: 110,
+  sol: (x, z) => {
+    if (!terrain || !adresse) return null;
+    const p = { x: adresse.l93.x + x, y: adresse.l93.y - z }, b = terrain.bbox;
+    return p.x < b[0] || p.x > b[2] || p.y < b[1] || p.y > b[3] ? null : solB(p) - alt0;
+  },
+  chargementEnCours: () => rechargeDrone && performance.now() - debutRecharge < 90_000,
+  recentrer: (x, z) => {
+    if (!adresse) return;
+    const p = { x: adresse.l93.x + x, y: adresse.l93.y - z };
+    poseDrone = { p, alt: alt0 + camera.position.y };
+    rechargeDrone = true;
+    debutRecharge = performance.now();
+    const pos = versWgs84(p);
+    void charger({ label: `🚁 Drone · ${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}`, position: pos, l93: p, idBan: '' });
+  },
+});
+$('drone').onclick = () => drone.basculer(true);
 
 // Diagnostic (tests automatisés) — exposé seulement en mode développeur (voir plus bas)
 const diagnostic = { bb: () => { const b = new THREE.Box3().setFromObject(habillage.groupe); return [b.min.toArray(), b.max.toArray()]; }, cam: (p: number[], t: number[]) => (camera.position.set(p[0]!, p[1]!, p[2]!), controls.target.set(t[0]!, t[1]!, t[2]!)), hab: () => ({ ms: Math.round(dureeHab), fait: habillage.fait, p: habillage.progression, meshes: habillage.groupe.children.length }), facade: () => facade, fen: () => facade && pointFenetre(), adresse: () => adresse };
