@@ -61,7 +61,7 @@ export function createKit(T, base) {
   const M = {
     wall, set, uJour,
     paint(hex, rough, metal = .05) { const k = hex + ':' + rough.toFixed(2); if (!paints.has(k)) paints.set(k, std({ color: hex, roughness: rough, metalness: metal })); return paints.get(k); },
-    zinc: new T.MeshStandardMaterial({ ...set('zinc'), color: 0x8a97a2, metalness: .6, roughness: .5 }),
+    zinc: new T.MeshStandardMaterial({ ...set('zinc'), color: 0x76818a, metalness: .4, roughness: .55 }),
     fonte: std({ color: 0x141619, metalness: .65, roughness: .42 }),
     zincTube: std({ color: 0x80878b, metalness: .35, roughness: .55 }),
     verres: [glass(0x33444c, .03, .22), glass(0x34453c, .05, .28), glass(0x48463f, .08, .34)],

@@ -12,6 +12,7 @@ import { batimentsAutour, contient, COUCHES, geocoder, tronconsAutour, urlWms, t
 import { creerVoirie3D, libererVoirie, masqueVoirie } from './voirie3d';
 import { creerSolUrbain, orthoSol } from './sol3d';
 import { adressesAutour, creerPlaques, type AdresseBan, type PanFacade } from './plaques';
+import { creerDetailsToits } from './toitures';
 import { creerHerbe, masqueHerbe, type Herbe } from './herbe';
 import { photosRue, type PhotoRue } from './photofacades';
 import { carteLumiere, creerLampadaires, equiperScene, lampesAllumees, lampesGenerees, lampesParis, partFenetres, U as UN, type Lampe } from './nuit';
@@ -105,19 +106,39 @@ const matRelief = new THREE.MeshStandardMaterial({ vertexColors: true, roughness
 matRelief.onBeforeCompile = (s) => {
   s.uniforms.uPhoto = uniformes.uPhoto;
   s.vertexShader = s.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float aBati;\nvarying float vBati;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBati = aBati;');
+    .replace('#include <common>', '#include <common>\nattribute float aBati, aToit, aMur;\nvarying float vBati, vToit, vMur;\nvarying vec3 vWpR;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBati = aBati; vToit = aToit; vMur = aMur; vWpR = (modelMatrix * vec4(transformed, 1.0)).xyz;');
   s.fragmentShader = s.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uPhoto;\nvarying float vBati;')
+    .replace('#include <common>', '#include <common>\nuniform float uPhoto;\nvarying float vBati, vToit, vMur;\nvarying vec3 vWpR;\nfloat hR(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
     .replace('#include <map_fragment>', '#ifdef USE_MAP\n vec3 photo = texture2D(map, vMapUv).rgb;\n#else\n vec3 photo = vec3(1.0);\n#endif')
     .replace('#include <color_fragment>', '')
     .replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
-       float haut = inverseTransformDirection(normal, viewMatrix).y;
-       if (vBati > 0.02 && haut < 0.6) discard;
+       vec3 nW = inverseTransformDirection(normal, viewMatrix);
+       float haut = nW.y;
+       // seuls les « rideaux » (ressaut > 3,5 m entre deux points LiDAR) sont masqués ; mansardes et pentes restent
+       if (vBati > 0.01) discard;
+       // pan raide sous le haut du mur IGN : c'est le mur vu par le LiDAR (pas une mansarde) → le mur IGN/la façade s'affiche
+       if (haut < 0.55 && vWpR.y < vMur - 1.0) discard;
        vec3 dessus = mix(vColor * 1.08, photo, uPhoto);
-       diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));`,
+       if (vToit > 0.5) {
+         // couverture : zinc à joints debout (pas de 0,5 m, dans le sens de la pente) ou ardoise sur les pans raides,
+         // teinte réelle de l'orthophoto sur les toits plats ; transition selon la pente mesurée
+         vec2 dc = normalize(vec2(-nW.z, nW.x) + 1e-4);
+         float sJ = dot(vWpR.xz, dc), lJ = dot(vWpR.xz, vec2(dc.y, -dc.x)) + vWpR.y;
+         float joint = 1.0 - smoothstep(0.0, 0.035, abs(fract(sJ / 0.5) - 0.5) - 0.465);
+         float bande = hR(vec2(floor(sJ / 0.5), 3.0));
+         vec3 zinc = vec3(0.21, 0.235, 0.255) * (0.9 + 0.2 * bande);
+         float ard = step(0.55, hR(floor(vWpR.xz / 9.0)));                     // certains immeubles : ardoise
+         vec2 qa = vec2(sJ / 0.3 + 0.5 * floor(lJ / 0.22), lJ / 0.22);
+         vec3 ardoise = vec3(0.075, 0.08, 0.095) * (0.8 + 0.4 * hR(floor(qa))) * (1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.06, fract(qa.y))));
+         vec3 raide = mix(zinc * (1.0 - 0.45 * joint), ardoise, ard * smoothstep(0.2, 0.5, 1.0 - haut));
+         raide = mix(raide, photo * 0.8, 0.25 * uPhoto);                        // garde les nuances réelles
+         diffuseColor.rgb = mix(raide, dessus, smoothstep(0.82, 0.95, haut));
+       } else {
+         diffuseColor.rgb = mix(vColor * 0.9, dessus, smoothstep(0.45, 0.8, haut));
+       }`,
     );
 };
 return matRelief;
@@ -140,7 +161,7 @@ matFacade.onBeforeCompile = (s) => {
     .replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
-       vec3 pierre = mix(vec3(0.86, 0.80, 0.70), vec3(0.93, 0.89, 0.82), vTeinte);
+       vec3 pierre = mix(vec3(0.62, 0.56, 0.47), vec3(0.70, 0.64, 0.54), vTeinte);
        pierre = mix(pierre, vec3(0.78, 0.66, 0.58), step(0.85, vTeinte));
        float u = vUv.x / 3.1, v = vUv.y / 3.0;
        float fx = fract(u), fy = fract(v);
@@ -174,6 +195,7 @@ redim();
 interface Terrain { bbox: [number, number, number, number]; n: number; mnt: Float32Array; nT: number; couverture: number; surf: Float32Array; classes: Uint8Array }
 let adresse: Adresse | null = null;
 let alt0 = 0;
+let toits: THREE.Group | undefined;
 let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
@@ -583,9 +605,44 @@ function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y:
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   // 1 = bâti LiDAR dont les murs sont dessinés par les murs IGN : ses pans raides (le « rideau » tendu du toit
   // jusqu'à la rue, en grands triangles blancs) ne sont pas affichés.
-  const bati = new Float32Array(n * n);
-  if (mursIgn) for (let i = 0; i < n * n; i++) bati[i] = classes[i] === 1 ? 1 : 0;
+  // Rideau = sommet d'un ressaut > 3,5 m entre deux points voisins autour du bâti (chute toit → rue/cour).
+  // Les pentes de toit, mansardes comprises (≈ 1,9 m par pas de 50 cm à 75°), ne sont pas touchées.
+  const bati = new Float32Array(n * n), toit = new Float32Array(n * n), mur = new Float32Array(n * n).fill(-1e4);
+  for (let i = 0; i < n * n; i++) toit[i] = classes[i] === 1 ? 1 : 0;
+  if (mursIgn) {
+    // Altitude du haut des murs IGN (emprise élargie de 1 m) : une pente forte dont le point bas est > 2,5 m sous
+    // ce niveau est le mur échantillonné par le LiDAR (pixels mixtes) → rideau masqué, le mur IGN/la façade le remplace.
+    // Le brisis d'une mansarde part de la gouttière (≈ haut du mur) : il reste.
+    const res = taille / n, b0 = alt0 - 60, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2 / res;
+    for (const b of batiments) {
+      const v = Math.max(0, Math.min(65535, Math.round((b.altitudeSol.valeur + b.hauteur.valeur - b0) * 100)));
+      ctx.fillStyle = ctx.strokeStyle = `rgb(${v >> 8},${v & 255},0)`;
+      ctx.beginPath();
+      b.contour.forEach((p, k) => { const x = (p.x - bbox[0]) / res, y = (bbox[3] - p.y) / res; if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+    }
+    const dm = ctx.getImageData(0, 0, n, n).data;
+    const sousMur = (k: number, h: number) => dm[k * 4 + 3] === 255 && h + alt0 < b0 + (dm[k * 4]! * 256 + dm[k * 4 + 1]!) / 100 - 2.5;
+    for (let i = 0; i < n * n; i++) if (dm[i * 4 + 3] === 255) mur[i] = b0 + (dm[i * 4]! * 256 + dm[i * 4 + 1]!) / 100 - alt0;
+    for (let i = 0; i < n * n; i++) {
+      const r = Math.floor(i / n), c = i % n, h = pos.getY(i);
+      for (const j of [c > 0 ? i - 1 : -1, c < n - 1 ? i + 1 : -1, r > 0 ? i - n : -1, r < n - 1 ? i + n : -1]) {
+        if (j < 0 || (classes[i] !== 1 && classes[j] !== 1)) continue;
+        const d = Math.abs(pos.getY(j) - h), bas = pos.getY(j) < h ? j : i;
+        // le point bas : tout triangle qui y touche est un rideau
+        if (d > 3.5 || (d > 0.9 * res + 0.4 && sousMur(bas, pos.getY(bas)))) bati[bas] = 1;
+      }
+    }
+  }
   geo.setAttribute('aBati', new THREE.BufferAttribute(bati, 1));
+  geo.setAttribute('aToit', new THREE.BufferAttribute(toit, 1));
+  geo.setAttribute('aMur', new THREE.BufferAttribute(mur, 1));
   geo.computeVertexNormals();
   geo.computeBoundsTree();
   const m = new THREE.Mesh(geo, mat);
@@ -950,6 +1007,16 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   habillage.lancer(taches.filter((t) => t.style !== 'photo'));
   void lancerPhotos(taches.filter((t) => t.style === 'photo'));
   void poserPlaques(taches, zD);
+  if (toits) (scene.remove(toits), toits.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
+  const o = adresse!.l93;
+  const dt = creerDetailsToits({
+    g: m.detail, taches, contours: batiments.filter((b) => !remplace(monuments, b)),
+    versL: (x, z) => ({ x: x + o.x, y: -z + o.y }), versS: (p) => ({ x: p.x - o.x, z: -(p.y - o.y) }),
+    y: (a) => a - alt0, sol: solA, mobile,
+  });
+  toits = dt.groupe;
+  scene.add(toits);
+  (window as unknown as { __toits: unknown }).__toits = dt.stats;
   fondSol.position.y = solA({ x: bbox[0], y: bbox[1] }) - alt0 - 1;
 
   // Murs des immeubles
