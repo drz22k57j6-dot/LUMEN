@@ -27,6 +27,9 @@ interface ProprietesBdTopo {
   nombre_de_logements: number | null;
   nombre_d_etages: number | null;
   identifiants_rnb: string | null;
+  date_d_apparition?: string | null;
+  materiaux_des_murs?: string | null;
+  materiaux_de_la_toiture?: string | null;
 }
 interface EntiteBdTopo {
   id: string;
@@ -40,8 +43,9 @@ const HAUTEUR_DEFAUT = 9;
 export function versBatiment(e: EntiteBdTopo): Batiment | null {
   if (!e.geometry) return null;
   const polys = (e.geometry.type === 'Polygon' ? [e.geometry.coordinates] : e.geometry.coordinates) as number[][][][];
-  const anneau = polys.map((p) => p[0] ?? []).sort((a, b) => b.length - a.length)[0];
-  if (!anneau || anneau.length < 4) return null;
+  const poly = [...polys].sort((a, b) => (b[0]?.length ?? 0) - (a[0]?.length ?? 0))[0];
+  const anneau = poly?.[0];
+  if (!poly || !anneau || anneau.length < 4) return null;
   const contour: XY[] = anneau.slice(0, -1).map(([lon, lat]) => versL93({ lon: lon!, lat: lat! }));
   const p = e.properties;
   const prec = p.precision_altimetrique ?? undefined;
@@ -55,11 +59,17 @@ export function versBatiment(e: EntiteBdTopo): Batiment | null {
       : donnee(0, 'genere', 'Lumen (altitude inconnue)');
   // identifiant IGN stable (cleabs « BATIMENT… ») : l'id WFS est un numéro interne qui change d'une livraison à l'autre
   const b: Batiment = { id: p.cleabs ?? e.id, contour, hauteur, altitudeSol: sol };
+  const trous = poly.slice(1).filter((r) => r.length >= 4).map((r) => r.slice(0, -1).map(([lon, lat]) => versL93({ lon: lon!, lat: lat! })));
+  if (trous.length) b.trous = trous;
   if (p.nature) b.nature = p.nature;
   if (p.usage_1) b.usage = p.usage_1;
   if (p.nombre_de_logements != null) b.nbLogements = p.nombre_de_logements;
   if (p.nombre_d_etages != null) b.nbEtages = p.nombre_d_etages;
   if (p.identifiants_rnb) b.idRnb = p.identifiants_rnb;
+  const an = p.date_d_apparition ? parseInt(p.date_d_apparition.slice(0, 4), 10) : NaN;
+  if (an > 1000 && an < 2100) b.annee = an;
+  if (p.materiaux_des_murs) b.murs = p.materiaux_des_murs;
+  if (p.materiaux_de_la_toiture) b.toiture = p.materiaux_de_la_toiture;
   return b;
 }
 

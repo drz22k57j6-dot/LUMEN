@@ -25,6 +25,8 @@ export interface Batiment {
   id: string;
   /** Contour extérieur en Lambert-93 (m), sans point de fermeture dupliqué. */
   contour: XY[];
+  /** Cours intérieures (anneaux intérieurs du polygone BD TOPO). */
+  trous?: XY[][];
   hauteur: Donnee<number>;
   altitudeSol: Donnee<number>;
   nature?: string;
@@ -32,6 +34,11 @@ export interface Batiment {
   nbLogements?: number;
   nbEtages?: number;
   idRnb?: string;
+  /** Année d'apparition (BD TOPO, fichiers fonciers ; souvent arrondie : 1800, 1850, 1900…). */
+  annee?: number;
+  /** Codes matériaux BD TOPO (2 chiffres : 0 indéterminé, 1 pierre, 2 meulière, 3 béton, 4 brique, 5 aggloméré, 6 bois, 9 autre). */
+  murs?: string;
+  toiture?: string;
 }
 
 export interface Etage { numero: number; altitudePlancher: Donnee<number> }

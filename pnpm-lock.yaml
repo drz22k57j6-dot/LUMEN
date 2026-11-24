@@ -32,6 +32,9 @@ importers:
       '@lumen/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@lumen/facades':
+        specifier: workspace:*
+        version: link:../../packages/facades
       '@lumen/interior':
         specifier: workspace:*
         version: link:../../packages/interior
@@ -78,6 +81,8 @@ importers:
       proj4:
         specifier: ^2.12.0
         version: 2.23.0(geotiff@2.1.3)
+
+  packages/facades: {}
 
   packages/interior:
     dependencies:

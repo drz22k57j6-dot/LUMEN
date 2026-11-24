@@ -7,7 +7,7 @@
 //    jusqu'à la gouttière des façades voisines.
 import * as THREE from 'three';
 import type { XY } from '@lumen/core';
-import type { TacheFacade } from './facadesNeutres';
+import type { TacheFacade } from './facades/mesher';
 
 export interface GrilleBrute {
   n: number;
@@ -27,6 +27,8 @@ export interface ParamsToits {
   y: (alt: number) => number;
   sol: (p: XY) => number;
   mobile: boolean;
+  /** Altitude du toit ajusté (toits procéduraux) : les cheminées y sont posées, sommet LiDAR conservé. */
+  surToit?: (p: XY) => number | null;
 }
 
 const hachage = (x: number, y: number) => {
@@ -100,7 +102,11 @@ export function creerDetailsToits(P: ParamsToits): { groupe: THREE.Group; stats:
     const mP = new THREE.InstancedMesh(mitron, terre, nPots);
     let iE = 0, iB = 0, iP = 0;
     for (const c of chem) {
-      const s = P.versS(c.p), y0 = P.y(c.base) - 0.2;
+      const s = P.versS(c.p);
+      const sommet = c.base + c.h, b0 = P.surToit?.(c.p) ?? c.base;
+      if (sommet - b0 < 0.7 || sommet - b0 > 5) continue;
+      const y0 = P.y(b0) - 0.3;
+      c.h = sommet - b0 + 0.1;
       q.setFromAxisAngle(up, c.ang);
       const L = 1.1 + hachage(c.p.x + 1, c.p.y) * 0.9;
       m4.compose(new THREE.Vector3(s.x, y0, s.z), q, sc.set(L, c.h + 0.2, 0.55));
@@ -113,6 +119,8 @@ export function creerDetailsToits(P: ParamsToits): { groupe: THREE.Group; stats:
       }
     }
     mP.count = iP;
+    mE.count = iE;
+    mB.count = iB;
     for (const o of [mE, mB, mP]) (o.castShadow = o.receiveShadow = true), groupe.add(o);
   }
 
