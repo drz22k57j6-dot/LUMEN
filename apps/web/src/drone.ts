@@ -30,7 +30,7 @@ export function initDrone(ctx: ContexteDrone) {
   let immobile = 0;
 
   const hud = document.createElement('div');
-  hud.id = 'drone';
+  hud.id = 'droneHud';
   hud.hidden = true;
   hud.innerHTML = `
     <div class="dr-haut">
@@ -44,17 +44,17 @@ export function initDrone(ctx: ContexteDrone) {
   document.body.append(hud);
   const style = document.createElement('style');
   style.textContent = `
-    #drone{position:fixed;inset:0;z-index:15;pointer-events:none}
-    #drone[hidden]{display:none}
-    #drone .dr-haut{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:64px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto}
-    #drone .pastille{background:#111c;color:#fff;border:1px solid #fff3;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-    #drone .dr-vit{display:flex;align-items:center;gap:6px;font-size:13px}
-    #drone .dr-vit input{width:110px;accent-color:#ffc21a}
-    #drone .dr-joy{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 28px);width:130px;height:130px;border-radius:50%;background:#ffffff1a;border:1px solid #ffffff40;pointer-events:auto;touch-action:none;display:grid;place-items:center}
-    #drone .dr-joy>div{width:52px;height:52px;border-radius:50%;background:#ffffffcc;pointer-events:none}
+    #droneHud{position:fixed;inset:0;z-index:15;pointer-events:none}
+    #droneHud[hidden]{display:none}
+    #droneHud .dr-haut{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:64px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto}
+    #droneHud .pastille{background:#111c;color:#fff;border:1px solid #fff3;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+    #droneHud .dr-vit{display:flex;align-items:center;gap:6px;font-size:13px}
+    #droneHud .dr-vit input{width:110px;accent-color:#ffc21a}
+    #droneHud .dr-joy{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 28px);width:130px;height:130px;border-radius:50%;background:#ffffff1a;border:1px solid #ffffff40;pointer-events:auto;touch-action:none;display:grid;place-items:center}
+    #droneHud .dr-joy>div{width:52px;height:52px;border-radius:50%;background:#ffffffcc;pointer-events:none}
     #drGauche{left:22px} #drDroite{right:22px}
-    #drone .dr-alt{position:absolute;right:30px;bottom:calc(env(safe-area-inset-bottom) + 175px);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
-    #drone .dr-alt button{width:54px;height:54px;border-radius:50%;border:1px solid #fff4;background:#111c;color:#fff;font-size:20px;touch-action:none}
+    #droneHud .dr-alt{position:absolute;right:30px;bottom:calc(env(safe-area-inset-bottom) + 175px);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+    #droneHud .dr-alt button{width:54px;height:54px;border-radius:50%;border:1px solid #fff4;background:#111c;color:#fff;font-size:20px;touch-action:none}
     body.drone-actif #feuille, body.drone-actif .feuille{display:none !important}`;
   document.head.append(style);
   const $ = <T extends HTMLElement>(s: string) => hud.querySelector(s) as T;
