@@ -17,6 +17,8 @@ export interface TacheFacade {
   a: [number, number];
   b: [number, number];
   y: number;
+  /** Rattrapage de pente sous le rez-de-chaussée (m) : soubassement en pierre jusqu'au point bas du trottoir. */
+  socle?: number;
   hGout: number;
   /** « photo » : immeuble non haussmannien, façade réelle (photos de rue), voir photofacades.ts */
   style: 'riche' | 'classique' | 'modeste' | 'moderne' | 'photo';
@@ -28,6 +30,7 @@ const TEINTES: Record<string, [number, number][]> = {
   riche: [[0xfaf2e3, 4], [0xf6eddb, 3], [0xfdf8ef, 2]],
   enduit: [[0xeee6d6, 3], [0xe2c08e, 1.2], [0xe6c2b6, 1], [0xe8da9e, 1], [0xbdb9b0, 1.5], [0xf4f1ea, 1.5]],
 };
+const MAT_SOCLE = new THREE.MeshStandardMaterial({ color: 0xcbc2b1, roughness: 0.9 });
 export const hachage = (s: string) => {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -136,6 +139,14 @@ export class Habillage {
       pClosed: 0.1,
       lod: t.lod,
     });
+    if ((t.socle ?? 0) > 0.04) {
+      // soubassement en pierre de taille (de 30 cm sous le point bas jusqu'au rez-de-chaussée)
+      const h = t.socle! + 0.3;
+      const s = new THREE.Mesh(new THREE.BoxGeometry(W, h, 0.55), MAT_SOCLE);
+      s.position.set(W / 2, -h / 2, -0.22);
+      s.castShadow = s.receiveShadow = true;
+      g.add(s);
+    }
     g.applyMatrix4(
       new THREE.Matrix4().makeBasis(new THREE.Vector3(dx, 0, dz), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-dz, 0, dx)).setPosition(ax, t.y, az),
     );

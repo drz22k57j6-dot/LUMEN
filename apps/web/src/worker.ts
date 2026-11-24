@@ -25,6 +25,31 @@ async function raster(couche: string, bbox: [number, number, number, number], n:
   return z;
 }
 
+/** Comble les trous (sans donnée) d'une grille par propagation depuis les cellules connues voisines. */
+function boucherTrous(z: Float32Array, n: number) {
+  let file: number[] = [];
+  for (let i = 0; i < n * n; i++) if (Number.isNaN(z[i]!)) {
+    const x = i % n;
+    for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) if (j >= 0 && j < n * n && !Number.isNaN(z[j]!)) { file.push(i); break; }
+  }
+  while (file.length) {
+    const suiv: number[] = [], vals: [number, number][] = [];
+    for (const i of file) {
+      if (!Number.isNaN(z[i]!)) continue;
+      const x = i % n;
+      let s = 0, k = 0;
+      for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) if (j >= 0 && j < n * n && !Number.isNaN(z[j]!)) { s += z[j]!; k++; }
+      if (k) vals.push([i, s / k]);
+    }
+    for (const [i, v] of vals) z[i] = v;
+    for (const [i] of vals) {
+      const x = i % n;
+      for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) if (j >= 0 && j < n * n && Number.isNaN(z[j]!)) suiv.push(j);
+    }
+    file = suiv;
+  }
+}
+
 async function charger(q: Extract<Requete, { type: 'charger' }>) {
   const R = q.rayon;
   const bbox: [number, number, number, number] = [q.centre.x - R, q.centre.y - R, q.centre.x + R, q.centre.y + R];
@@ -32,6 +57,7 @@ async function charger(q: Extract<Requete, { type: 'charger' }>) {
   const nT = Math.round((2 * R) / 2); // MNT à 2 m
   post({ type: 'etape', texte: 'Téléchargement du LiDAR IGN…' });
   const [zS, zT] = await Promise.all([raster(COUCHES.mns, bbox, nS), raster(COUCHES.mnt, bbox, nT)]);
+  boucherTrous(zT, nT); // un trou du MNT ne doit jamais faire tomber le sol à l'altitude de l'adresse
   post({ type: 'etape', texte: 'Analyse des toits et de la végétation…' });
 
   // Masque des emprises de bâtiments BD TOPO.
