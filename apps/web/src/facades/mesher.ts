@@ -72,6 +72,7 @@ export class MoteurFacades {
     const mur = (t: TexMur, rough = 0.88) => {
       const m = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normal, roughness: rough, metalness: 0, vertexColors: true });
       m.normalScale.set(0.9, 0.9);
+      patiner(m);
       return m;
     };
     const pierre = texPierre(aniso), refends = texRefends(aniso);
@@ -98,6 +99,22 @@ export class MoteurFacades {
     }
     equiperFenetres({ vc: this.mats.vitre, rideau: this.mats.rideau, rideauTire: this.mats.rideau2 });
     this.groupe.name = 'facades';
+  }
+
+  /** Typologie retenue pour un bâtiment (toits assortis aux façades). */
+  typologie(idBat: string) {
+    return this.parBat.get(idBat)?.typologie;
+  }
+
+  /** FacadeSpec d'une tâche (sans géométrie) — pour aligner les lucarnes sur les travées. */
+  spec(t: TacheFacade): FacadeSpec {
+    const W = Math.hypot(t.b[0] - t.a[0], t.b[1] - t.a[1]);
+    return composer({ id: t.id, largeur: W, hGout: t.hGout, socle: t.socle ?? 0, ...(t.bat ?? {}) }, this.parBat.get(t.id.split(':')[0]!));
+  }
+
+  /** Classe les bâtiments sans lancer la fabrication (pour les toits, avant les façades). */
+  preparer(taches: TacheFacade[]) {
+    this.lancer(taches);
   }
 
   get progression() {
@@ -407,6 +424,29 @@ export class MoteurFacades {
 }
 
 const w2 = (l: number) => l / 2;
+
+/** Patine des murs (shader) : salissure en pied de façade, nuances à grande échelle, coulures verticales. */
+function patiner(m: THREE.MeshStandardMaterial) {
+  m.defines = { ...(m.defines ?? {}), USE_UV: '' };
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = 'varying vec3 vWpF;\n' + s.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvWpF = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWpF;
+float hF(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float nF(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hF(i), hF(i + vec2(1, 0)), f.x), mix(hF(i + vec2(0, 1)), hF(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float pied = smoothstep(0.0, 1.6, vUv.y);
+    diffuseColor.rgb *= mix(0.74, 1.0, pied);
+    float n = nF(vWpF.xz * 0.23 + vec2(vWpF.y * 0.17, 0.0)) * 0.6 + nF(vWpF.xz * 0.9 + vWpF.y * 0.5) * 0.4;
+    diffuseColor.rgb *= 0.9 + 0.16 * n;
+    float c = nF(vec2((vWpF.x + vWpF.z) * 2.3, vWpF.y * 0.12));
+    diffuseColor.rgb *= 1.0 - 0.1 * smoothstep(0.62, 0.95, c);
+  }`);
+  };
+}
 /** Teintes sRGB → linéaire (les couleurs de sommets sont lues en linéaire). */
 const lin = (c: number) => Math.pow(Math.min(1, Math.max(0, c)), 2.2);
 function hacheId(s: string) {

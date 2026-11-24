@@ -24,6 +24,7 @@ import { depuisParis, especeDuGenre, urlArbresParis, type Arbre, type ArbreParis
 import { initStudio } from './studio3d';
 import { initCarte } from './carte2d';
 import { MoteurFacades, type TacheFacade } from './facades/mesher';
+import { construireToits } from './toits/toits';
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
@@ -189,6 +190,30 @@ interface Terrain { bbox: [number, number, number, number]; n: number; mnt: Floa
 let adresse: Adresse | null = null;
 let alt0 = 0;
 let toits: THREE.Group | undefined;
+let toitsProc: ReturnType<typeof construireToits> | null = null;
+/** Emprises couvertes par un toit procédural : le LiDAR bâti y est ramené au sol dans le maillage du relief. */
+let masqueToits: ((x: number, y: number) => boolean) | null = null;
+function masque(bats: Batiment[], bb: Terrain['bbox']) {
+  const res = 0.5, n = Math.ceil((bb[2] - bb[0]) / res);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.2 / res;
+  ctx.lineJoin = 'round';
+  for (const b of bats) {
+    ctx.beginPath();
+    for (const r of [b.contour]) r.forEach((p, k) => (k ? ctx.lineTo : ctx.moveTo).call(ctx, (p.x - bb[0]) / res, (bb[3] - p.y) / res));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  const d = ctx.getImageData(0, 0, n, n).data;
+  return (x: number, y: number) => {
+    const c = Math.floor((x - bb[0]) / res), l = Math.floor((bb[3] - y) / res);
+    return c >= 0 && l >= 0 && c < n && l < n && d[(l * n + c) * 4]! > 127;
+  };
+}
 let batiments: Batiment[] = [];
 let troncons: Troncon[] = [];
 let voirie: THREE.Group | null = null;
@@ -590,7 +615,7 @@ function maillage(g: Grille2, bboxOrtho: Terrain['bbox'], basse?: (x: number, y:
   const dansMonument = emprisesMonuments(monuments, batiments);
   for (let i = 0; i < n * n; i++) {
     const x = pos.getX(i) + adresse!.l93.x, y = -pos.getZ(i) + adresse!.l93.y;
-    pos.setY(i, basse?.(x, y) ? solA({ x, y }) - alt0 - 3 : (monuments.length && dansMonument({ x, y }) ? solA({ x, y }) : hauteurs[i]!) - alt0);
+    pos.setY(i, basse?.(x, y) ? solA({ x, y }) - alt0 - 3 : (masqueToits?.(x, y) || (monuments.length && dansMonument({ x, y })) ? solA({ x, y }) - (masqueToits?.(x, y) ? 0.3 : 0) : hauteurs[i]!) - alt0);
     uv.setXY(i, (x - bboxOrtho[0]) / tO, (bboxOrtho[3] - y) / tO);
     teintes[classes[i]!]!.toArray(col, i * 3);
   }
@@ -917,11 +942,30 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   aplanirVegetation(m.detail);
   planterArbres(bbox);
   nettoyerBords(m, 1.5);
-  relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1, matRelief, true);
   const taches = tachesFacades(m.detail);
   (window as unknown as { __taches: unknown }).__taches = taches;
-  abaisserSousFacades(m.detail, taches);
   nettoyerBords(m.detail);
+  // Toits procéduraux ajustés au LiDAR (remplacent le LiDAR bâti maillé) ; les façades montent à leur égout.
+  moteurFacades.preparer(taches);
+  const ech = (g: Grille2) => (p: XY) => {
+    const r = (g.bbox[2] - g.bbox[0]) / g.n, c = Math.floor((p.x - g.bbox[0]) / r), l = Math.floor((g.bbox[3] - p.y) / r);
+    return c < 0 || l < 0 || c >= g.n || l >= g.n ? NaN : g.hauteurs[l * g.n + c]!;
+  };
+  const mnsD = ech(m.detail), mnsR = ech(m);
+  const avecToit = batiments.filter((b) => b.contour.every((p) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3]) && b.hauteur.valeur >= 2.5 && !remplace(monuments, b));
+  if (toitsProc) (scene.remove(toitsProc.groupe), toitsProc.groupe.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
+  toitsProc = construireToits({
+    batiments: avecToit, taches, spec: (t) => moteurFacades.spec(t),
+    mns: (p) => { const z = mnsD(p); return Number.isFinite(z) ? z : mnsR(p); },
+    sol: solB, typologie: (id) => moteurFacades.typologie(id),
+    versS: (p) => { const l = local(p, 0); return { x: l.x, z: l.z }; }, y: (a) => a - alt0,
+    centre: adresse!.l93, mobile, aniso: renderer.capabilities.getMaxAnisotropy(),
+  });
+  scene.add(toitsProc.groupe);
+  (window as unknown as { __toitsProc: unknown }).__toitsProc = toitsProc.stats;
+  (window as unknown as { __toitsMap: unknown }).__toitsMap = toitsProc.toits;
+  masqueToits = masque(avecToit, bbox);
+  relief = maillage(m, bbox, (x, y) => x > zD[0] + 1 && x < zD[2] - 1 && y > zD[1] + 1 && y < zD[3] - 1, matRelief, true);
   detail = maillage(m.detail, bbox, undefined, matRelief, true);
   scene.add(relief, detail);
   moteurFacades.lancer(taches);
@@ -929,7 +973,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   if (toits) (scene.remove(toits), toits.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
   const o = adresse!.l93;
   const dt = creerDetailsToits({
-    g: m.detail, taches, contours: batiments.filter((b) => !remplace(monuments, b)),
+    g: m.detail, taches, contours: batiments.filter((b) => !remplace(monuments, b)), surToit: (p) => toitsProc?.surToit(p) ?? null,
     versL: (x, z) => ({ x: x + o.x, y: -z + o.y }), versS: (p) => ({ x: p.x - o.x, z: -(p.y - o.y) }),
     y: (a) => a - alt0, sol: solA, mobile,
   });
@@ -953,7 +997,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
     const zHaut = Math.max(...autour), base = Math.min(...autour) - 0.5;
     const contour = enDetail ? rentrer(b.contour, 0.8) : b.contour;
     const forme = new THREE.Shape(contour.map((p) => new THREE.Vector2(p.x - adresse!.l93.x, p.y - adresse!.l93.y)));
-    const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, b.altitudeSol.valeur + b.hauteur.valeur - base - 0.6), bevelEnabled: false });
+    const zEg = toitsProc?.toits.get(b.id)?.zGmin;
+    const g = new THREE.ExtrudeGeometry(forme, { depth: Math.max(2, (zEg ?? b.altitudeSol.valeur + b.hauteur.valeur - 0.6) - base - 0.05), bevelEnabled: false });
     // v des murs = hauteur depuis le sol (m)
     const uvA = g.attributes.uv as THREE.BufferAttribute, posA = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < uvA.count; i++) uvA.setY(i, posA.getZ(i) - (zHaut - base));

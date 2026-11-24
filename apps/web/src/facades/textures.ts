@@ -7,13 +7,13 @@ import * as THREE from 'three';
 
 export interface TexMur { map: THREE.Texture; normal: THREE.Texture; metres: number }
 
-function bruit(seed: number) {
+export function bruit(seed: number) {
   let x = seed >>> 0 || 1;
   return () => ((x = Math.imul(x ^ (x >>> 15), 2246822519) ^ Math.imul(x ^ (x >>> 13), 3266489917)), ((x >>> 0) % 100000) / 100000);
 }
 
 /** Construit couleur + normales à partir d'une fonction (px, py) → [gris 0–1, relief 0–1]. */
-function fabriquer(N: number, metres: number, f: (x: number, y: number) => [number, number] | [number, number, number, number], aniso: number, force = 2): TexMur {
+export function fabriquer(N: number, metres: number, f: (x: number, y: number) => [number, number] | [number, number, number, number], aniso: number, force = 2): TexMur {
   const col: Uint8Array<ArrayBuffer> = new Uint8Array(N * N * 4), haut = new Float32Array(N * N);
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
@@ -50,7 +50,7 @@ function fabriquer(N: number, metres: number, f: (x: number, y: number) => [numb
   return { map: mk(col, true), normal: mk(nor, false), metres };
 }
 
-const lisse = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export const lisse = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /** Pierre de taille : assises de 50 cm, blocs de ~1 m en quinconce, joints fins. Tuile 2 m. */
 export function texPierre(aniso: number): TexMur {

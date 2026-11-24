@@ -25,6 +25,8 @@ export interface Batiment {
   id: string;
   /** Contour extérieur en Lambert-93 (m), sans point de fermeture dupliqué. */
   contour: XY[];
+  /** Cours intérieures (anneaux intérieurs du polygone BD TOPO). */
+  trous?: XY[][];
   hauteur: Donnee<number>;
   altitudeSol: Donnee<number>;
   nature?: string;
