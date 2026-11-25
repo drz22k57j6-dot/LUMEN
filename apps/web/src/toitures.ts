@@ -135,7 +135,8 @@ export function creerDetailsToits(P: ParamsToits): { groupe: THREE.Group; stats:
   }
   const pos: number[] = [];
   let angles = 0;
-  for (const b of P.contours) {
+  // avec les toits procéduraux, les murs (angles compris) sont construits sur le contour exact : rien à fermer ici
+  for (const b of P.surToit ? [] : P.contours) {
     const ts = parBat.get(b.id);
     if (!ts?.length) continue;
     const habilles = new Set(ts.map((t) => Number(t.id.split(':')[1])));
