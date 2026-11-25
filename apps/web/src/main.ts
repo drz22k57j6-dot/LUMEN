@@ -727,7 +727,9 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
         gouttieres.push(Math.min(h1, Number.isFinite(h2) ? h2 : h1));
       }
       if (decalages.length < Math.max(1, Math.floor(L / 4))) return;
-      const dec = mediane(decalages), gout = mediane(gouttieres);
+      // la façade est posée EXACTEMENT sur l'arête BD TOPO (même contour que le toit et les murs : aucun écart) ;
+      // le LiDAR sert seulement à reconnaître un vrai mur sur rue et à mesurer sa gouttière
+      const dec = 0, gout = mediane(gouttieres);
       const A2 = { x: A.x + nrm.x * dec, y: A.y + nrm.y * dec }, B2 = { x: B.x + nrm.x * dec, y: B.y + nrm.y * dec };
       const m2 = { x: m.x + nrm.x * dec, y: m.y + nrm.y * dec };
       // Profil du trottoir le long de toute la façade (MNT interpolé, tous les mètres) : en rue en pente,
@@ -743,7 +745,7 @@ function tachesFacades(g: Grille2 & { brut: Float32Array }): TacheFacade[] {
       // Rue ou cour : espace dégagé sur au moins 5 m devant la façade.
       if (Math.max(zB(m2.x + nrm.x * 4, m2.y + nrm.y * 4), zB(m2.x + nrm.x * 5.5, m2.y + nrm.y * 5.5)) > gout - 2) return;
       const la = local(A2, 0), lb = local(B2, 0);
-      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 40 : 70) ? 0 : 1, d: dist,
+      t.push({ id: `${b.id}:${i}`, a: [la.x, la.z], b: [lb.x, lb.z], y: base - alt0, socle, hGout: gout - base, lod: dist < (mobile ? 35 : 70) ? 0 : dist < (mobile ? 85 : 130) ? 1 : 2, d: dist,
         bat: { hHaut: Number.isFinite(zToit) ? Math.max(gout, zToit) - base : undefined, annee: b.annee, nbEtages: b.nbEtages, murs: b.murs, usage: b.usage, nature: b.nature, hauteurBat: b.hauteur.valeur } });
     });
   }
@@ -955,7 +957,8 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const avecToit = batiments.filter((b) => b.contour.every((p) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3]) && b.hauteur.valeur >= 2.5 && !remplace(monuments, b));
   if (toitsProc) (scene.remove(toitsProc.groupe), toitsProc.groupe.traverse((o) => (o as THREE.Mesh).geometry?.dispose()));
   toitsProc = construireToits({
-    batiments: avecToit, taches, spec: (t) => moteurFacades.spec(t),
+    batiments: avecToit, voisins: batiments, taches, spec: (t) => moteurFacades.spec(t),
+    murs: { pierre: moteurFacades.materiaux.pierre, brique: moteurFacades.materiaux.brique, enduit: moteurFacades.materiaux.enduit, beton: moteurFacades.materiaux.beton },
     mns: (p) => { const z = mnsD(p); return Number.isFinite(z) ? z : mnsR(p); },
     sol: solB, typologie: (id) => moteurFacades.typologie(id),
     versS: (p) => { const l = local(p, 0); return { x: l.x, z: l.z }; }, y: (a) => a - alt0,
@@ -987,6 +990,7 @@ function construireRelief(m: Grille2 & { mnt: Float32Array; nT: number; couvertu
   const dedans = (p: XY) => p.x > bbox[0] && p.x < bbox[2] && p.y > bbox[1] && p.y < bbox[3];
   for (const b of batiments) {
     if (!b.contour.every(dedans) || b.hauteur.valeur < 2.5 || remplace(monuments, b)) continue;
+    if (toitsProc?.toits.has(b.id)) continue; // murs propres construits avec le toit (contour exact)
     // Zone de détail : les façades générées sont posées sur la vraie ligne du mur ; les murs IGN, rentrés de 0,8 m,
     // ferment les côtés non habillés (cours, pignons, façades pas encore générées) au lieu du rideau LiDAR.
     const enDetail = b.contour.every((p) => p.x > zD[0] && p.x < zD[2] && p.y > zD[1] && p.y < zD[3]);

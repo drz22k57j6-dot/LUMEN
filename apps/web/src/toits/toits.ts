@@ -1,15 +1,20 @@
 /**
- * Toits procéduraux AJUSTÉS au LiDAR HD, assortis aux façades.
+ * Toits v2 — reconstruction « couvreur » d'après le LiDAR HD.
  *
- * Pourquoi : maillé tel quel, le LiDAR 50 cm donne des toits « fondus » (marches du raster, rideaux, bruit).
- * Ici chaque bâtiment reçoit un toit propre dont les paramètres sont MESURÉS sur le LiDAR :
- *  - égout (gouttière) = celle des façades du bâtiment (une seule hauteur par bâtiment : le mur et le toit se raccordent) ;
- *  - faîte = 90e centile du LiDAR dans l'emprise (cheminées exclues) ;
- *  - forme : terrasse / mansarde (brisis + terrasson) / pentes, d'après le profil LiDAR mesuré derrière les façades ;
- *  - les pentes partent des murs donnant sur rue ou cour ; les murs mitoyens (bâti contigu au LiDAR) ne portent pas
- *    d'égout : le toit se prolonge, et un pignon ferme la différence de hauteur avec le voisin.
- * Hauteur d'un point = égout + profil(distance aux murs d'égout) plafonnée au faîte (toit « squelette » équivalent).
- * Géométrie : triangulation de l'emprise (cours comprises) subdivisée près des arêtes, facettes à normales plates.
+ * Principe (méthode des modèles LOD2 de villes, adaptée à Paris) :
+ *  1. Chaque mur de l'emprise BD TOPO est classé : ÉGOUT (sur rue ou cour, une gouttière) ou MITOYEN (bâti contigu :
+ *     autre emprise BD TOPO ou LiDAR haut juste derrière). Les murs presque alignés sont fusionnés en une seule ligne
+ *     d'égout ; les petits décrochés ne créent pas de pans (pas de formes « jamais vues »).
+ *  2. Le PROFIL du toit est mesuré une fois par bâtiment sur le LiDAR (hauteur au-dessus de la gouttière en fonction
+ *     de la distance au mur, médiane sur tous les murs d'égout), puis ajusté à un modèle de couvreur :
+ *       terrasse · pans (une pente, 15–60°) · mansarde (brisis 72° + terrasson 0–30°) · plafond = faîte mesuré.
+ *     Mêmes pentes sur tout le bâtiment ⇒ arêtiers, noues et faîtages cohérents, comme un vrai toit.
+ *  3. Chaque ligne d'égout porte ses PLANS (brisis, terrasson ou pan) ; le toit est l'enveloppe basse de ces plans,
+ *     chacun n'agissant que dans son « champ » (devant son mur, cône à 45° aux extrémités, sans traverser le vide).
+ *  4. Géométrie EXACTE : triangulation de l'emprise, puis chaque triangle est découpé le long des intersections
+ *     de plans (arêtiers, noues, ligne de brisis) → facettes planes, arêtes nettes, pas de stries.
+ *  5. Étanche par construction : murs posés sur le contour exact (façade sur rue, mur plein ailleurs, pignon sur
+ *     mitoyen), débord d'égout, et un fond de toit sombre sous chaque bâtiment (aucun trou visible).
  */
 import * as THREE from 'three';
 import type { Batiment, XY } from '@lumen/core';
@@ -22,34 +27,43 @@ export type Couverture = 'zinc' | 'ardoise' | 'tuile' | 'terrasse';
 
 export interface ParamsToitsProc {
   batiments: Batiment[];
+  /** Toutes les emprises (y compris hors zone) pour reconnaître les mitoyens. */
+  voisins?: Batiment[];
   taches: TacheFacade[];
   spec?: (t: TacheFacade) => FacadeSpec;
-  /** LiDAR MNS absolu (m NGF) : 50 cm près de l'adresse, 1 m au-delà ; NaN hors données. */
   mns: (p: XY) => number;
   sol: (p: XY) => number;
   typologie: (id: string) => Typologie | undefined;
-  /** L93 → scène (x, z) ; altitude NGF → y scène */
   versS: (p: XY) => { x: number; z: number };
   y: (alt: number) => number;
   centre: XY;
   mobile: boolean;
   aniso: number;
+  /** Matériaux des murs pleins (ceux des façades : même pierre, même patine). */
+  murs?: Record<'pierre' | 'brique' | 'enduit' | 'beton', THREE.Material>;
 }
 
 export interface ToitBat {
   id: string;
-  /** égout médian (m NGF) et le plus bas (haut des murs IGN) */
   zG: number;
   zGmin: number;
   zTop: number;
   forme: FormeToit;
   couverture: Couverture;
   hBrisis: number;
+  pente: number;
+  /** écart quadratique moyen modèle ↔ LiDAR (m) */
+  rms: number;
 }
 
-interface Arete { A: XY; B: XY; L: number; ux: number; uy: number; nx: number; ny: number; egout: boolean; /** égout de cette arête (m NGF) */ zG: number; tache: TacheFacade | null }
+interface Mur { A: XY; B: XY; L: number; ux: number; uy: number; nx: number; ny: number; egout: boolean; tache: TacheFacade | null; ring: number }
+interface Ligne { A: XY; B: XY; L: number; ux: number; uy: number; nx: number; ny: number; zG: number; murs: Mur[] }
+/** plan z = a·x + b·y + c (L93), avec sa ligne d'égout et son type */
+interface Plan { a: number; b: number; c: number; ligne: number; type: 'brisis' | 'terrasson' | 'pan' | 'plafond' }
+interface Modele { forme: FormeToit; hB: number; tanT: number; tanP: number; hTop: number; err: number }
 
-const TAN75 = Math.tan((75 * Math.PI) / 180);
+const DEG = Math.PI / 180;
+const TAN_BRISIS = Math.tan(72 * DEG);
 
 function dansAnneau(r: XY[], p: XY) {
   let c = false;
@@ -60,25 +74,19 @@ function dansAnneau(r: XY[], p: XY) {
   return c;
 }
 const dansBat = (b: Batiment, p: XY) => dansAnneau(b.contour, p) && !(b.trous ?? []).some((t) => dansAnneau(t, p));
-
-function distSeg(p: XY, a: Arete) {
-  const t = Math.max(0, Math.min(a.L, (p.x - a.A.x) * a.ux + (p.y - a.A.y) * a.uy));
-  return Math.hypot(p.x - (a.A.x + a.ux * t), p.y - (a.A.y + a.uy * t));
-}
-
 const med = (v: number[]) => (v.length ? [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)]! : NaN);
+const quantile = (v: number[], q: number) => (v.length ? [...v].sort((a, b) => a - b)[Math.min(v.length - 1, Math.floor(v.length * q))]! : NaN);
 
 // ---------------------------------------------------------------------------
-// Textures de couverture (procédurales)
+// Textures de couverture
 // ---------------------------------------------------------------------------
 function texZinc(aniso: number) {
-  // joints debout tous les 60 cm (u), bandes de 2 m (v) ; zinc prépatiné gris-bleu
   const R = bruit(21), tache = new Float32Array(32 * 8).map(() => R());
   return fabriquer(256, 2.4, (x, y) => {
     const u = (x / 256) * 2.4, v = (y / 256) * 2.4;
     const j = Math.min(u % 0.6, 0.6 - (u % 0.6));
     const joint = 1 - lisse(0.006, 0.022, j);
-    const t = tache[Math.floor(u / 0.6) * 8 + Math.floor(v / 0.6) % 8]! * 0.05;
+    const t = tache[Math.floor(u / 0.6) * 8 + (Math.floor(v / 0.6) % 8)]! * 0.05;
     const g = (R() - 0.5) * 0.03;
     return [0.42 + t + g + joint * 0.1, 0.3 + joint * 0.7, 0.46 + t + g + joint * 0.09, 0.5 + t + g + joint * 0.09];
   }, aniso, 6);
@@ -116,113 +124,140 @@ function texTerrasse(aniso: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Analyse d'un bâtiment
+// 1. Murs (égout / mitoyen) et lignes d'égout fusionnées
 // ---------------------------------------------------------------------------
-function analyser(b: Batiment, P: ParamsToitsProc, tachesBat: TacheFacade[]): { toit: ToitBat; aretes: Arete[] } | null {
-  const anneaux = [b.contour, ...(b.trous ?? [])];
-  const aretes: Arete[] = [];
-  const parIdx = new Map(tachesBat.map((t) => [Number(t.id.split(':')[1]), t]));
-  for (const [ir, r] of anneaux.entries())
-    for (let i = 0; i < r.length; i++) {
-      const A = r[i]!, B = r[(i + 1) % r.length]!, L = Math.hypot(B.x - A.x, B.y - A.y);
-      if (L < 0.05) continue;
-      const ux = (B.x - A.x) / L, uy = (B.y - A.y) / L;
-      let nx = uy, ny = -ux; // normale sortante (vers l'extérieur du bâti)
-      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-      if (dansBat(b, { x: m.x + nx * 0.3, y: m.y + ny * 0.3 })) (nx = -nx), (ny = -ny);
-      aretes.push({ A, B, L, ux, uy, nx, ny, egout: true, zG: NaN, tache: ir === 0 ? parIdx.get(i) ?? null : null });
-    }
-  // Sol et gouttière
-  const solB = P.sol(b.contour[0]!);
-  // Mitoyenneté : bâti haut (LiDAR) juste derrière le mur, des deux tiers des points
-  for (const a of aretes) {
-    let haut = 0, n = 0;
-    for (const f of [0.2, 0.5, 0.8]) {
-      const p = { x: a.A.x + (a.B.x - a.A.x) * f + a.nx * 1.4, y: a.A.y + (a.B.y - a.A.y) * f + a.ny * 1.4 };
-      const z = P.mns(p);
-      if (!Number.isFinite(z)) continue;
-      n++;
-      if (z - P.sol(p) > 3.5) haut++;
-    }
-    a.egout = !(n && haut / n >= 0.66);
+function indexEmprises(bats: Batiment[]) {
+  const T = 25, g = new Map<string, Batiment[]>();
+  for (const b of bats) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of b.contour) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+    for (let i = Math.floor(x0 / T); i <= Math.floor(x1 / T); i++)
+      for (let j = Math.floor(y0 / T); j <= Math.floor(y1 / T); j++) {
+        const k = i + ',' + j;
+        (g.get(k) ?? g.set(k, []).get(k)!).push(b);
+      }
   }
-  if (!aretes.some((a) => a.egout)) aretes.forEach((a) => (a.egout = true));
-  const egouts = aretes.filter((a) => a.egout);
-
-  // Égout PAR ARÊTE : celui de la façade mesurée sur ce mur, sinon LiDAR juste derrière le mur
-  const zBd = b.altitudeSol.valeur + b.hauteur.valeur;
-  for (const a of egouts) {
-    if (a.tache) { a.zG = a.tache.y + a.tache.hGout - P.y(0); continue; }
-    const v: number[] = [];
-    for (let s = Math.min(0.5, a.L / 2); s < a.L; s += 1.2) {
-      const z = P.mns({ x: a.A.x + a.ux * s - a.nx * 0.7, y: a.A.y + a.uy * s - a.ny * 0.7 });
-      if (Number.isFinite(z)) v.push(z);
-    }
-    if (v.length) a.zG = v.sort((x, y) => x - y)[Math.floor(v.length * 0.3)]!;
-  }
-  const connus = egouts.filter((a) => Number.isFinite(a.zG) && a.zG > solB + 2);
-  let zG = connus.length ? med(connus.map((a) => a.zG)) : zBd;
-  if (!Number.isFinite(zG) || zG < solB + 2) zG = zBd;
-  if (!Number.isFinite(zG)) return null;
-  for (const a of egouts) if (!(Number.isFinite(a.zG) && a.zG > solB + 2)) a.zG = zG;
-  const zGmin = Math.min(...egouts.map((a) => a.zG));
-
-  // Faîte : 90e centile du LiDAR dans l'emprise ; profil derrière les murs d'égout
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of b.contour) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
-  const pas = Math.max(0.7, Math.sqrt(((x1 - x0) * (y1 - y0)) / 500));
-  const zs: number[] = [];
-  let dMax = 0;
-  for (let x = x0 + pas / 2; x < x1; x += pas)
-    for (let y = y0 + pas / 2; y < y1; y += pas) {
-      const p = { x, y };
-      if (!dansBat(b, p)) continue;
-      let d = Infinity;
-      for (const a of egouts) d = Math.min(d, distSeg(p, a));
-      dMax = Math.max(dMax, d);
-      const z = P.mns(p);
-      if (Number.isFinite(z)) zs.push(z);
-    }
-  zs.sort((a, c) => a - c);
-  const typo = P.typologie(b.id);
-  const mansardeTypo = typo === 'haussmannien' || typo === 'post-haussmannien' || typo === 'equipement';
-  let zTop = zs.length >= 5 ? zs[Math.floor(zs.length * 0.9)]! : zG + (mansardeTypo ? 4 : 0.3);
-  zTop = Math.min(Math.max(zTop, zG), zG + 14);
-  const dz = zTop - zG;
-  // profil mesuré : hauteur médiane au-dessus de l'égout à 1,5 m derrière les murs d'égout
-  const p15: number[] = [];
-  for (const a of egouts) for (let s = 0.6; s < a.L - 0.6; s += 1.2) {
-    const z = P.mns({ x: a.A.x + a.ux * s - a.nx * 1.5, y: a.A.y + a.uy * s - a.ny * 1.5 });
-    if (Number.isFinite(z)) p15.push(z - zG);
-  }
-  const h15 = med(p15);
-  let forme: FormeToit;
-  let hBrisis = 0;
-  if (dz < 0.9 || (typo && /moderne|tour|bureaux|contemporain/.test(typo) && dz < 2.5)) forme = 'terrasse';
-  else if ((Number.isFinite(h15) && h15 >= 1.4 && dz >= 1.8) || (mansardeTypo && dz >= 1.8)) {
-    forme = 'mansarde';
-    hBrisis = Math.min(dz, Math.max(1.6, Math.min(3.6, Number.isFinite(h15) ? h15 + 0.6 : 2.8)));
-  } else forme = 'pentes';
-  // Couverture : BD TOPO (1 tuiles, 2 ardoises, 3 zinc) sinon typologie
-  const t = b.toiture ?? '';
-  let couverture: Couverture =
-    forme === 'terrasse' ? 'terrasse' : t.includes('3') ? 'zinc' : t.includes('2') ? 'ardoise' : t.includes('1') ? 'tuile'
-      : typo === 'brique' || (typo === 'faubourien' && forme === 'pentes') ? 'tuile' : typo === 'equipement' ? 'ardoise' : 'zinc';
-  if (forme === 'mansarde' && couverture === 'tuile') couverture = 'zinc';
-  void dMax;
-  return { toit: { id: b.id, zG, zGmin, zTop, forme, couverture, hBrisis }, aretes };
+  return (p: XY, sauf: string) => (g.get(Math.floor(p.x / T) + ',' + Math.floor(p.y / T)) ?? []).some((b) => b.id !== sauf && dansBat(b, p));
 }
 
-/** Profil de hauteur au-dessus de l'égout en fonction de la distance aux murs d'égout. */
-function profil(t: ToitBat, d: number, pente: number) {
-  const dz = t.zTop - t.zG;
-  if (t.forme === 'terrasse') return 0.2;
-  if (t.forme === 'mansarde') {
-    const run = t.hBrisis / TAN75;
-    if (d <= run) return d * TAN75;
-    return Math.min(dz, t.hBrisis + (d - run) * pente);
+function classerMurs(b: Batiment, P: ParamsToitsProc, occupe: (p: XY, sauf: string) => boolean, taches: TacheFacade[]): Mur[] {
+  const parIdx = new Map(taches.map((t) => [Number(t.id.split(':')[1]), t]));
+  const out: Mur[] = [];
+  [b.contour, ...(b.trous ?? [])].forEach((r, ring) =>
+    r.forEach((A, i) => {
+      const B = r[(i + 1) % r.length]!, L = Math.hypot(B.x - A.x, B.y - A.y);
+      if (L < 0.05) return;
+      const ux = (B.x - A.x) / L, uy = (B.y - A.y) / L;
+      let nx = uy, ny = -ux;
+      const m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      if (dansBat(b, { x: m.x + nx * 0.25, y: m.y + ny * 0.25 })) (nx = -nx), (ny = -ny);
+      const tache = ring === 0 ? parIdx.get(i) ?? null : null;
+      let mit = 0, haut = 0, n = 0;
+      for (const f of [0.2, 0.5, 0.8]) {
+        const q = { x: A.x + (B.x - A.x) * f + nx * 0.8, y: A.y + (B.y - A.y) * f + ny * 0.8 };
+        if (occupe(q, b.id)) mit++;
+        const q2 = { x: A.x + (B.x - A.x) * f + nx * 1.5, y: A.y + (B.y - A.y) * f + ny * 1.5 };
+        const z = P.mns(q2);
+        if (Number.isFinite(z)) (n++, z - P.sol(q2) > 3.5 && haut++);
+      }
+      const egout = !!tache || !(mit >= 2 || (n > 0 && haut / n >= 0.67));
+      out.push({ A, B, L, ux, uy, nx, ny, egout, tache, ring });
+    }),
+  );
+  if (!out.some((m) => m.egout)) out.forEach((m) => (m.egout = true));
+  return out;
+}
+
+/** Fusionne les murs d'égout consécutifs presque alignés (≤ 14°, décroché ≤ 0,6 m) en lignes d'égout. */
+function fusionner(ms: Mur[]): Ligne[] {
+  const res: Ligne[] = [];
+  const parRing = new Map<number, Mur[]>();
+  for (const m of ms) (parRing.get(m.ring) ?? parRing.set(m.ring, []).get(m.ring)!).push(m);
+  for (const r of parRing.values()) {
+    let start = r.findIndex((m, i) => {
+      const p = r[(i - 1 + r.length) % r.length]!;
+      return !p.egout || !m.egout || p.ux * m.ux + p.uy * m.uy < Math.cos(22 * DEG);
+    });
+    if (start < 0) start = 0;
+    let cur: Mur[] = [];
+    const finir = () => {
+      if (!cur.length) return;
+      const A = cur[0]!.A, B = cur[cur.length - 1]!.B, L = Math.hypot(B.x - A.x, B.y - A.y);
+      if (L >= 1.0) {
+        const ux = (B.x - A.x) / L, uy = (B.y - A.y) / L;
+        let nx = 0, ny = 0;
+        for (const m of cur) (nx += m.nx * m.L), (ny += m.ny * m.L);
+        const s = Math.sign(nx * uy - ny * ux) || 1;
+        res.push({ A, B, L, ux, uy, nx: uy * s, ny: -ux * s, zG: NaN, murs: cur });
+      }
+      cur = [];
+    };
+    for (let k = 0; k < r.length; k++) {
+      const m = r[(start + k) % r.length]!;
+      if (!m.egout) { finir(); continue; }
+      if (cur.length) {
+        const A = cur[0]!.A, L0 = Math.hypot(m.B.x - A.x, m.B.y - A.y);
+        const ux = (m.B.x - A.x) / L0, uy = (m.B.y - A.y) / L0;
+        const ok = m.ux * ux + m.uy * uy > Math.cos(22 * DEG) && cur.every((c) => Math.abs((c.B.x - A.x) * uy - (c.B.y - A.y) * ux) <= 1.0);
+        if (!ok) finir();
+      }
+      cur.push(m);
+    }
+    finir();
   }
-  return Math.min(dz, d * pente);
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// 2. Modèle de couvreur ajusté au profil LiDAR
+// ---------------------------------------------------------------------------
+function ajuster(profil: { d: number; h: number; w: number }[], hTop: number, typo: Typologie | undefined): Modele {
+  const evalue = (f: (d: number) => number) => {
+    let e = 0, sw = 0;
+    for (const p of profil) {
+      const r = Math.min(f(p.d), hTop) - p.h;
+      e += p.w * Math.min(r * r, 9);
+      sw += p.w;
+    }
+    return sw ? e / sw : Infinity;
+  };
+  const cands: Modele[] = [{ forme: 'terrasse', hB: 0, tanT: 0, tanP: 0, hTop: 0.25, err: evalue(() => 0.2) + 0.02 }];
+  for (let s = 15; s <= 60; s += 2.5) {
+    const t = Math.tan(s * DEG);
+    cands.push({ forme: 'pentes', hB: 0, tanT: 0, tanP: t, hTop, err: evalue((d) => d * t) });
+  }
+  for (let hB = 1.5; hB <= Math.min(4.2, hTop); hB += 0.25)
+    for (let s = 0; s <= 30; s += 2.5) {
+      const t = Math.tan(s * DEG), r = hB / TAN_BRISIS;
+      cands.push({ forme: 'mansarde', hB, tanT: t, tanP: 0, hTop, err: evalue((d) => (d <= r ? d * TAN_BRISIS : hB + (d - r) * t)) + 0.01 });
+    }
+  const prior = (m: Modele) =>
+    (typo === 'haussmannien' || typo === 'post-haussmannien') && m.forme === 'mansarde' ? -0.05
+      : (typo === 'moderne' || typo === 'tour' || typo === 'bureaux' || typo === 'contemporain') && m.forme === 'terrasse' ? -0.06 : 0;
+  return cands.reduce((a, b) => (b.err + prior(b) < a.err + prior(a) ? b : a));
+}
+
+function parDefaut(typo: Typologie | undefined, hTop: number): Modele {
+  if (typo === 'haussmannien' || typo === 'post-haussmannien' || typo === 'equipement')
+    return { forme: 'mansarde', hB: Math.min(2.8, Math.max(1.6, hTop || 2.8)), tanT: Math.tan(18 * DEG), tanP: 0, hTop: Math.max(hTop, 3.5), err: NaN };
+  if (typo === 'faubourien' || typo === 'brique') return { forme: 'pentes', hB: 0, tanT: 0, tanP: Math.tan(35 * DEG), hTop: Math.max(hTop, 3), err: NaN };
+  return { forme: 'terrasse', hB: 0, tanT: 0, tanP: 0, hTop: 0.25, err: NaN };
+}
+
+function plansDe(li: Ligne[], M: Modele, zTop: number): Plan[] {
+  const out: Plan[] = [];
+  li.forEach((l, k) => {
+    // d(p) = (p − A)·n_int, n_int = −n (n sortante)
+    const ix = -l.nx, iy = -l.ny, c0 = -(l.A.x * ix + l.A.y * iy);
+    const plan = (pente: number, z0: number, type: Plan['type']) => out.push({ a: pente * ix, b: pente * iy, c: z0 + pente * c0, ligne: k, type });
+    if (M.forme === 'mansarde') {
+      const run = M.hB / TAN_BRISIS;
+      plan(TAN_BRISIS, l.zG, 'brisis');
+      plan(M.tanT, l.zG + M.hB - run * M.tanT, 'terrasson');
+    } else if (M.forme === 'pentes') plan(M.tanP, l.zG, 'pan');
+  });
+  out.push({ a: 0, b: 0, c: zTop, ligne: -1, type: 'plafond' });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,20 +266,26 @@ function profil(t: ToitBat, d: number, pente: number) {
 export function construireToits(P: ParamsToitsProc) {
   const groupe = new THREE.Group();
   groupe.name = 'toits';
-  const mats: Record<Couverture | 'pignon' | 'acrotere' | 'lucarne' | 'vitre', THREE.MeshStandardMaterial> = {
-    zinc: new THREE.MeshStandardMaterial({ roughness: 0.58, metalness: 0.12, vertexColors: true }),
-    ardoise: new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, vertexColors: true }),
-    tuile: new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0, vertexColors: true }),
-    terrasse: new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, vertexColors: true }),
-    pignon: new THREE.MeshStandardMaterial({ color: 0xcfc6b6, roughness: 0.95 }),
-    acrotere: new THREE.MeshStandardMaterial({ color: 0xbdb7ab, roughness: 0.9 }),
-    lucarne: new THREE.MeshStandardMaterial({ color: 0xe4dccb, roughness: 0.85 }),
-    vitre: new THREE.MeshStandardMaterial({ color: 0x3e4852, roughness: 0.08, metalness: 0.55 }),
+  const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(o);
+  const mats: Record<string, THREE.Material> = {
+    zinc: std({ roughness: 0.58, metalness: 0.12, vertexColors: true }),
+    ardoise: std({ roughness: 0.55, metalness: 0.1, vertexColors: true }),
+    tuile: std({ roughness: 0.8, metalness: 0, vertexColors: true }),
+    terrasse: std({ roughness: 0.95, metalness: 0, vertexColors: true }),
+    acrotere: std({ color: 0xbdb7ab, roughness: 0.9 }),
+    lucarne: std({ color: 0xe4dccb, roughness: 0.85 }),
+    vitre: std({ color: 0x3e4852, roughness: 0.08, metalness: 0.55 }),
+    fond: std({ color: 0x3b3f44, roughness: 0.9 }),
+    mur: std({ color: 0xffffff, roughness: 0.92, vertexColors: true }),
   };
-  const tz = texZinc(P.aniso), ta = texArdoise(P.aniso), tt = texTuile(P.aniso), tr = texTerrasse(P.aniso);
-  for (const [m, t] of [[mats.zinc, tz], [mats.ardoise, ta], [mats.tuile, tt], [mats.terrasse, tr]] as const) (m.map = t.map), (m.normalMap = t.normal);
-  for (const [k, m] of Object.entries(mats)) (m.name = 'toit_' + k), (m.customProgramCacheKey = () => 'toit_' + k);
+  for (const [k, t] of [['zinc', texZinc(P.aniso)], ['ardoise', texArdoise(P.aniso)], ['tuile', texTuile(P.aniso)], ['terrasse', texTerrasse(P.aniso)]] as const) {
+    const m = mats[k] as THREE.MeshStandardMaterial;
+    (m.map = t.map), (m.normalMap = t.normal);
+  }
+  for (const [k, m] of Object.entries(mats)) (m.name = 'toit_' + k), ((m as THREE.MeshStandardMaterial).customProgramCacheKey = () => 'toit_' + k);
+  if (P.murs) Object.assign(mats, { murPierre: P.murs.pierre, murBrique: P.murs.brique, murEnduit: P.murs.enduit, murBeton: P.murs.beton });
 
+  const occupe = indexEmprises(P.voisins ?? P.batiments);
   const parBat = new Map<string, TacheFacade[]>();
   for (const t of P.taches) {
     const k = t.id.split(':')[0]!;
@@ -255,183 +296,313 @@ export function construireToits(P: ParamsToitsProc) {
   const buf = (k: string) => bufs.get(k) ?? bufs.set(k, { p: [], n: [], uv: [], c: [] }).get(k)!;
   const toits = new Map<string, ToitBat>();
   const hauteurs = new Map<string, (p: XY) => number>();
-  const stats = { batiments: 0, triangles: 0, mansardes: 0, pentes: 0, terrasses: 0, lucarnes: 0 };
+  const stats = { batiments: 0, triangles: 0, mansardes: 0, pentes: 0, terrasses: 0, lucarnes: 0, rmsMedian: 0, ms: 0, echecs: 0 };
+  const rmsTous: number[] = [];
+  const t0 = performance.now();
 
-  const tri = (k: string, a: number[], b: number[], c: number[], uva: number[], uvb: number[], uvc: number[], col: number[]) => {
-    // normale plate, orientée vers le haut / l'extérieur selon l'ordre donné
+  const S = (p: XY, z: number): number[] => { const q = P.versS(p); return [q.x, P.y(z), q.z]; };
+  const tri = (k: string, a: number[], b: number[], c: number[], uva: number[], uvb: number[], uvc: number[], col: number[], versHaut = true) => {
     const e1 = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!], e2 = [c[0]! - a[0]!, c[1]! - a[1]!, c[2]! - a[2]!];
-    const n = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+    let n = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
     const l = Math.hypot(n[0]!, n[1]!, n[2]!);
     if (!(l > 1e-9)) return;
+    if (versHaut && n[1]! < 0) {
+      [b, c] = [c, b];
+      [uvb, uvc] = [uvc, uvb];
+      n = n.map((x) => -x);
+    }
     const B = buf(k);
     B.p.push(...a, ...b, ...c);
     for (let i = 0; i < 3; i++) B.n.push(n[0]! / l, n[1]! / l, n[2]! / l);
     B.uv.push(...uva, ...uvb, ...uvc);
     for (let i = 0; i < 3; i++) B.c.push(...col);
   };
-  /** quad vertical/oblique orienté selon `vers` (vecteur scène vers lequel la face regarde) */
   const quad = (k: string, q: number[][], vers: number[], uv: number[][], col = [1, 1, 1]) => {
     const [a, b, c, d] = q as [number[], number[], number[], number[]];
     const e1 = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!], e2 = [c[0]! - a[0]!, c[1]! - a[1]!, c[2]! - a[2]!];
     const n = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
-    if (n[0]! * vers[0]! + n[1]! * vers[1]! + n[2]! * vers[2]! >= 0) (tri(k, a, b, c, uv[0]!, uv[1]!, uv[2]!, col), tri(k, a, c, d, uv[0]!, uv[2]!, uv[3]!, col));
-    else (tri(k, a, c, b, uv[0]!, uv[2]!, uv[1]!, col), tri(k, a, d, c, uv[0]!, uv[3]!, uv[2]!, col));
+    if (n[0]! * vers[0]! + n[1]! * vers[1]! + n[2]! * vers[2]! >= 0) (tri(k, a, b, c, uv[0]!, uv[1]!, uv[2]!, col, false), tri(k, a, c, d, uv[0]!, uv[2]!, uv[3]!, col, false));
+    else (tri(k, a, c, b, uv[0]!, uv[2]!, uv[1]!, col, false), tri(k, a, d, c, uv[0]!, uv[3]!, uv[2]!, col, false));
   };
+  const versScene = (nx: number, ny: number) => { const q0 = P.versS({ x: 0, y: 0 }), q1 = P.versS({ x: nx, y: ny }); return [q1.x - q0.x, 0, q1.z - q0.z]; };
 
-  for (const b of P.batiments) {
+  const construireUn = (b: Batiment) => {
     const ts = parBat.get(b.id) ?? [];
-    const an = analyser(b, P, ts);
-    if (!an) continue;
-    const { toit: T, aretes } = an;
-    toits.set(b.id, T);
-    stats.batiments++;
-    stats[T.forme === 'mansarde' ? 'mansardes' : T.forme === 'pentes' ? 'pentes' : 'terrasses']++;
-    const egouts = aretes.filter((a) => a.egout);
-    const dist = (p: XY) => {
-      let d = Infinity;
-      for (const a of egouts) d = Math.min(d, distSeg(p, a));
-      return d;
-    };
-    const proche = (p: XY) => {
-      let d = Infinity, best = egouts[0]!;
-      for (const a of egouts) {
-        const x = distSeg(p, a);
-        if (x < d) (d = x), (best = a);
-      }
-      return best;
-    };
-    // pente fixée pour atteindre le faîte mesuré au point le plus éloigné des égouts (toit « squelette »)
-    let dMax = 0;
-    const c0 = b.contour;
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const p of c0) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
-    const pas = Math.max(0.6, Math.sqrt(((x1 - x0) * (y1 - y0)) / 400));
-    for (let x = x0 + pas / 2; x < x1; x += pas) for (let y = y0 + pas / 2; y < y1; y += pas) if (dansBat(b, { x, y })) dMax = Math.max(dMax, dist({ x, y }));
-    const dz = T.zTop - T.zG;
-    const run = T.forme === 'mansarde' ? T.hBrisis / TAN75 : 0;
-    const pente =
-      T.forme === 'mansarde' ? Math.min(Math.tan(0.5), Math.max(Math.tan(0.09), (dz - T.hBrisis) / Math.max(0.5, dMax - run)))
-        : Math.min(Math.tan(1.05), Math.max(Math.tan(0.26), dz / Math.max(0.5, dMax)));
-    // Égout lissé entre arêtes (pondération par proximité : continu, pas de marche) et plafond LiDAR local
-    const egoutEn = (p: XY) => {
-      let dmin = Infinity;
-      const ds = egouts.map((a) => { const d = distSeg(p, a); dmin = Math.min(dmin, d); return d; });
-      let sw = 0, sz = 0;
-      ds.forEach((d, i) => { if (d > dmin + 6) return; const w = 1 / Math.pow(d - dmin + 0.3, 3); sw += w; sz += w * egouts[i]!.zG; });
-      return { z: sz / sw, d: dmin };
-    };
-    const plafond = (p: XY) => {
+    const typo = P.typologie(b.id);
+    const ms = classerMurs(b, P, occupe, ts);
+    const li = fusionner(ms);
+    if (!li.length) return;
+    const solB = Math.min(...b.contour.map((p) => P.sol(p)));
+    const zBd = b.altitudeSol.valeur + b.hauteur.valeur;
+
+    // --- égouts : façade mesurée, sinon LiDAR juste derrière le mur ; alignés sur la médiane à 0,7 m près ---
+    for (const l of li) {
+      const zt = l.murs.filter((m) => m.tache).map((m) => m.tache!.y + m.tache!.hGout - P.y(0));
+      if (zt.length) { l.zG = med(zt); continue; }
       const v: number[] = [];
-      for (const [ox, oy] of [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [2.4, 0], [-2.4, 0], [0, 2.4], [0, -2.4], [1.7, 1.7], [-1.7, 1.7], [1.7, -1.7], [-1.7, -1.7]] as const) {
-        const z = P.mns({ x: p.x + ox, y: p.y + oy });
+      for (let s = Math.min(0.6, l.L / 2); s < l.L; s += 1.2) {
+        const z = P.mns({ x: l.A.x + l.ux * s - l.nx * 0.7, y: l.A.y + l.uy * s - l.ny * 0.7 });
         if (Number.isFinite(z)) v.push(z);
       }
-      return v.length >= 6 ? v.sort((x, y) => x - y)[Math.floor(v.length * 0.7)]! + 0.3 : Infinity;
+      l.zG = v.length ? quantile(v, 0.3) : NaN;
+    }
+    const ok = li.filter((l) => Number.isFinite(l.zG) && l.zG > solB + 2.5);
+    let zG = ok.length ? med(ok.map((l) => l.zG)) : zBd;
+    if (!Number.isFinite(zG) || zG < solB + 2.5) zG = zBd;
+    if (!Number.isFinite(zG)) return;
+    for (const l of li) {
+      if (!(Number.isFinite(l.zG) && l.zG > solB + 2.5) || Math.abs(l.zG - zG) < 0.7) l.zG = zG;
+      for (const m of l.murs) if (m.tache) m.tache.hGout = Math.max(3, P.y(l.zG) - m.tache.y);
+    }
+    const zGmin = Math.min(...li.map((l) => l.zG));
+
+    // --- profil LiDAR et faîte ---
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of b.contour) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+    const parD = new Map<number, number[]>();
+    for (const l of li)
+      for (let s = Math.min(1, l.L / 3); s <= l.L - Math.min(1, l.L / 3) + 1e-6; s += 1.5)
+        for (let d = 0.5; d <= 14; d += 0.5) {
+          const q = { x: l.A.x + l.ux * s - l.nx * d, y: l.A.y + l.uy * s - l.ny * d };
+          if (!dansBat(b, q)) break;
+          const z = P.mns(q);
+          if (Number.isFinite(z)) (parD.get(d) ?? parD.set(d, []).get(d)!).push(z - l.zG);
+        }
+    const profil = [...parD.entries()].filter(([, v]) => v.length >= 2).map(([d, v]) => ({ d, h: med(v), w: (d < 4 ? 2 : 1) * Math.sqrt(v.length) }));
+    const pasT = Math.max(0.8, Math.sqrt(((x1 - x0) * (y1 - y0)) / 400));
+    const zs: number[] = [];
+    for (let x = x0 + pasT / 2; x < x1; x += pasT)
+      for (let y = y0 + pasT / 2; y < y1; y += pasT)
+        if (dansBat(b, { x, y })) {
+          const z = P.mns({ x, y });
+          if (Number.isFinite(z)) zs.push(z);
+        }
+    const hTop = zs.length >= 6 ? Math.min(12, Math.max(0.3, quantile(zs, 0.85) - zG)) : NaN;
+    let M = profil.length >= 4 && Number.isFinite(hTop) ? ajuster(profil, hTop, typo) : parDefaut(typo, Number.isFinite(hTop) ? hTop : 0);
+    if (M.forme !== 'terrasse' && M.hTop < 1) M = { ...M, forme: 'terrasse' };
+    const terrasse = M.forme === 'terrasse';
+    const zTop = zG + (terrasse ? 0.25 : M.hTop);
+    // seules les vraies lignes d'égout (≥ 2,5 m) portent un pan : un petit décroché ne crée pas de pan parasite
+    const liP = li.filter((l) => l.L >= 2.5).length ? li.filter((l) => l.L >= 2.5) : li;
+    const plans = plansDe(liP, M, zTop);
+
+    // --- enveloppe basse des plans, chacun dans son champ ---
+    const actif = (pl: Plan, p: XY) => {
+      if (pl.ligne < 0) return true;
+      const l = liP[pl.ligne]!;
+      const d = -((p.x - l.A.x) * l.nx + (p.y - l.A.y) * l.ny);
+      if (d < -0.05) return false;
+      const t = (p.x - l.A.x) * l.ux + (p.y - l.A.y) * l.uy;
+      return t >= -d - 0.3 && t <= l.L + d + 0.3;
     };
-    const H = (p: XY) => {
-      const { z, d } = egoutEn(p);
-      if (T.forme === 'terrasse') return z + 0.2;
-      return Math.max(z, Math.min(z + profil(T, d, pente), plafond(p), T.zTop));
+    const zPlan = (pl: Plan, p: XY) => pl.a * p.x + pl.b * p.y + pl.c;
+    const label = (p: XY) => {
+      let z = Infinity, k = plans.length - 1;
+      for (let i = 0; i < plans.length; i++) {
+        const pl = plans[i]!;
+        if (!actif(pl, p)) continue;
+        const v = zPlan(pl, p);
+        if (v < z - 1e-9) (z = v), (k = i);
+      }
+      return k;
     };
+    const H = (p: XY) => (terrasse ? zG + 0.2 : Math.max(zGmin, zPlan(plans[label(p)]!, p)));
     hauteurs.set(b.id, H);
 
-    // --- triangulation de l'emprise (cours comprises) + subdivision adaptative ---
+    // contrôle de fidélité au LiDAR
+    let e2 = 0, ne = 0;
+    for (let x = x0 + pasT / 2; x < x1; x += pasT * 2)
+      for (let y = y0 + pasT / 2; y < y1; y += pasT * 2)
+        if (dansBat(b, { x, y })) {
+          const z = P.mns({ x, y });
+          if (Number.isFinite(z)) { const r = H({ x, y }) - z; e2 += Math.min(r * r, 25); ne++; }
+        }
+    const rms = ne ? Math.sqrt(e2 / ne) : NaN;
+    if (Number.isFinite(rms)) rmsTous.push(rms);
+
+    const tc = b.toiture ?? '';
+    let couverture: Couverture = terrasse ? 'terrasse' : tc.includes('3') ? 'zinc' : tc.includes('2') ? 'ardoise' : tc.includes('1') ? 'tuile'
+      : typo === 'brique' || (typo === 'faubourien' && M.forme === 'pentes') ? 'tuile' : typo === 'equipement' ? 'ardoise' : 'zinc';
+    if (M.forme === 'mansarde' && couverture === 'tuile') couverture = 'zinc';
+    toits.set(b.id, { id: b.id, zG, zGmin, zTop, forme: M.forme, couverture, hBrisis: M.hB, pente: (Math.atan(M.forme === 'pentes' ? M.tanP : M.tanT) / DEG), rms });
+    stats.batiments++;
+    stats[M.forme === 'mansarde' ? 'mansardes' : M.forme === 'pentes' ? 'pentes' : 'terrasses']++;
+
+    // --- maillage : quadtree restreint calé sur les pans ---
+    // Grandes cellules là où le toit est un seul pan (plan exact), cellules de 0,5 m seulement le long des plis
+    // (arêtiers, noues, brisis). Chaque cellule est remplie en éventail depuis son centre avec TOUS les sommets
+    // présents sur ses côtés (y compris ceux des voisines plus fines) ⇒ maillage conforme : ni fissure ni épine.
+    // Les cellules du bord sont découpées exactement par l'emprise (Sutherland–Hodgman), cours déduites.
     const loin = Math.hypot((x0 + x1) / 2 - P.centre.x, (y0 + y1) / 2 - P.centre.y) > 160;
-    const fin = (T.forme === 'terrasse' ? 99 : T.forme === 'mansarde' ? 0.9 : 1.5) * (loin ? 2.2 : 1) * (P.mobile ? 1.3 : 1);
-    const gros = T.forme === 'terrasse' ? 99 : (loin ? 5 : 3);
-    const pts: XY[] = [...c0];
     const trous = (b.trous ?? []).filter((t) => t.length >= 3);
-    for (const t of trous) pts.push(...t);
-    let faces: number[][];
-    try {
-      faces = THREE.ShapeUtils.triangulateShape(c0.map((p) => new THREE.Vector2(p.x, p.y)), trous.map((t) => t.map((p) => new THREE.Vector2(p.x, p.y))));
-    } catch {
-      continue;
-    }
-    const cache = new Map<string, number>();
-    const milieu = (i: number, j: number) => {
-      const k = i < j ? `${i}_${j}` : `${j}_${i}`;
-      let m = cache.get(k);
-      if (m == null) {
-        const a = pts[i]!, c = pts[j]!;
-        pts.push({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 });
-        cache.set(k, (m = pts.length - 1));
+    const V = (r: XY[]) => r.map((p) => new THREE.Vector2(p.x, p.y));
+    const k = couverture;
+    const uvDe = (pl: Plan, p: XY) => {
+      if (pl.ligne < 0) return [p.x, p.y];
+      const l = liP[pl.ligne]!;
+      const pente = Math.hypot(pl.a, pl.b);
+      return [(p.x - l.A.x) * l.ux + (p.y - l.A.y) * l.uy, (-((p.x - l.A.x) * l.nx + (p.y - l.A.y) * l.ny)) * Math.sqrt(1 + pente * pente)];
+    };
+    const emettreTri = (A: XY, B: XY, C: XY) => {
+      const g2 = { x: (A.x + B.x + C.x) / 3, y: (A.y + B.y + C.y) / 3 };
+      const pl = plans[terrasse ? plans.length - 1 : label(g2)]!;
+      const col = pl.type === 'brisis' ? [0.86, 0.88, 0.92] : [1, 1, 1];
+      tri(k, S(A, H(A)), S(B, H(B)), S(C, H(C)), uvDe(pl, A), uvDe(pl, B), uvDe(pl, C), col);
+    };
+    const fin = (loin ? 1.0 : 0.5) * (P.mobile ? 1.25 : 1);
+    let racine = fin;
+    while (racine < (terrasse ? 64 : 4)) racine *= 2;
+    // feuilles du quadtree
+    type Cel = { x: number; y: number; s: number };
+    const feuilles: Cel[] = [];
+    const uniforme = (c: Cel) => {
+      if (terrasse) return true;
+      const l0 = label({ x: c.x, y: c.y });
+      for (let i = 0; i <= 4; i++)
+        for (let j = 0; j <= 4; j++) if (label({ x: c.x + (c.s * i) / 4, y: c.y + (c.s * j) / 4 }) !== l0) return false;
+      return true;
+    };
+    const touche = (c: Cel) => {
+      // la cellule recoupe-t-elle l'emprise ? (sommet dedans, ou un sommet de l'emprise dans la cellule)
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]] as const) if (dansBat(b, { x: c.x + c.s * dx, y: c.y + c.s * dy })) return true;
+      for (const r of [b.contour, ...trous]) for (const p of r) if (p.x >= c.x && p.x <= c.x + c.s && p.y >= c.y && p.y <= c.y + c.s) return true;
+      for (const r of [b.contour, ...trous])
+        for (let i = 0; i < r.length; i++) {
+          const A = r[i]!, B = r[(i + 1) % r.length]!;
+          if (Math.max(A.x, B.x) < c.x || Math.min(A.x, B.x) > c.x + c.s || Math.max(A.y, B.y) < c.y || Math.min(A.y, B.y) > c.y + c.s) continue;
+          return true;
+        }
+      return false;
+    };
+    const diviser = (c: Cel) => {
+      if (!touche(c)) return;
+      if (c.s <= fin * 1.001 || uniforme(c)) { feuilles.push(c); return; }
+      const h2 = c.s / 2;
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) diviser({ x: c.x + dx * h2, y: c.y + dy * h2, s: h2 });
+    };
+    const gx = Math.floor(x0 / racine) * racine, gy = Math.floor(y0 / racine) * racine;
+    for (let x = gx; x < x1; x += racine) for (let y = gy; y < y1; y += racine) diviser({ x, y, s: racine });
+    // sommets de toutes les feuilles, indexés sur la grille la plus fine
+    const cle = (x: number, y: number) => Math.round(x / fin) + ',' + Math.round(y / fin);
+    const coins = new Set<string>();
+    for (const c of feuilles) for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) coins.add(cle(c.x + c.s * dx, c.y + c.s * dy));
+    const clip = (poly: XY[], c: Cel) => {
+      // polygone (quelconque) découpé par la cellule (convexe)
+      const bords: [(p: XY) => number, number][] = [];
+      let out = poly;
+      for (const f of [(p: XY) => c.x - p.x, (p: XY) => p.x - (c.x + c.s), (p: XY) => c.y - p.y, (p: XY) => p.y - (c.y + c.s)]) {
+        const inp = out;
+        out = [];
+        for (let i = 0; i < inp.length; i++) {
+          const A = inp[i]!, B = inp[(i + 1) % inp.length]!, fa = f(A), fb = f(B);
+          if (fa <= 0) out.push(A);
+          if ((fa <= 0) !== (fb <= 0)) { const t = fa / (fa - fb); out.push({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t }); }
+        }
+        if (!out.length) break;
       }
-      return m;
+      void bords;
+      return out;
     };
-    const coupe = (i: number, j: number) => {
-      const a = pts[i]!, c = pts[j]!, L = Math.hypot(c.x - a.x, c.y - a.y);
-      if (L <= fin) return false;
-      const d = dist({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 });
-      return L > (d < run + 1.2 ? fin : gros);
-    };
-    const fil = faces.map((f) => [f[0]!, f[1]!, f[2]!]);
-    const finales: number[][] = [];
-    let garde = 0;
-    while (fil.length && garde++ < 60000) {
-      const [a, c, e] = fil.pop()! as [number, number, number];
-      const sAC = coupe(a, c), sCE = coupe(c, e), sEA = coupe(e, a);
-      if (!sAC && !sCE && !sEA) {
-        finales.push([a, c, e]);
+    for (const c of feuilles) {
+      // contour de la cellule avec les sommets des voisines plus fines
+      const bordC: XY[] = [];
+      const n = Math.round(c.s / fin);
+      const cotes: [number, number, number, number][] = [[c.x, c.y, 1, 0], [c.x + c.s, c.y, 0, 1], [c.x + c.s, c.y + c.s, -1, 0], [c.x, c.y + c.s, 0, -1]];
+      for (const [sx, sy, dx, dy] of cotes)
+        for (let i = 0; i < n; i++) {
+          const x = sx + dx * fin * i, y = sy + dy * fin * i;
+          if (i === 0 || coins.has(cle(x, y))) bordC.push({ x, y });
+        }
+      const toutDedans = [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => dansBat(b, { x: c.x + c.s * dx!, y: c.y + c.s * dy! }))
+        && ![b.contour, ...trous].some((r) => r.some((p) => p.x > c.x - 1e-6 && p.x < c.x + c.s + 1e-6 && p.y > c.y - 1e-6 && p.y < c.y + c.s + 1e-6))
+        && ![b.contour, ...trous].some((r) => r.some((A, i) => { const B = r[(i + 1) % r.length]!; return Math.max(A.x, B.x) > c.x && Math.min(A.x, B.x) < c.x + c.s && Math.max(A.y, B.y) > c.y && Math.min(A.y, B.y) < c.y + c.s; }));
+      if (toutDedans) {
+        const C = { x: c.x + c.s / 2, y: c.y + c.s / 2 };
+        if (bordC.length === 4 && uniforme(c)) { emettreTri(bordC[0]!, bordC[1]!, bordC[2]!); emettreTri(bordC[0]!, bordC[2]!, bordC[3]!); continue; }
+        if (bordC.length === 4) {
+          // cellule fine traversée par UN pli : points exacts du pli sur les côtés, coupe nette en deux pans plans
+          const ring: XY[] = [], ins: number[] = [];
+          for (let i = 0; i < 4; i++) {
+            const A = bordC[i]!, B = bordC[(i + 1) % 4]!, la = label(A), lb = label(B);
+            ring.push(A);
+            if (la !== lb) {
+              const pa = plans[la]!, pb = plans[lb]!;
+              const fa = zPlan(pa, A) - zPlan(pb, A), fb = zPlan(pa, B) - zPlan(pb, B);
+              const t = Math.abs(fa - fb) > 1e-9 ? Math.min(1, Math.max(0, fa / (fa - fb))) : 0.5;
+              ins.push(ring.length);
+              ring.push({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
+            }
+          }
+          if (ins.length === 2) {
+            const [i0, i1] = ins as [number, number];
+            for (const piece of [ring.slice(i0, i1 + 1), [...ring.slice(i1), ...ring.slice(0, i0 + 1)]])
+              for (let i = 1; i + 1 < piece.length; i++) emettreTri(piece[0]!, piece[i]!, piece[i + 1]!);
+            continue;
+          }
+        }
+        for (let i = 0; i < bordC.length; i++) emettreTri(C, bordC[i]!, bordC[(i + 1) % bordC.length]!);
         continue;
       }
-      // découpe en 4 si au moins une arête est trop longue (milieux partagés : pas de fissure)
-      const m1 = milieu(a, c), m2 = milieu(c, e), m3 = milieu(e, a);
-      fil.push([a, m1, m3], [m1, c, m2], [m3, m2, e], [m1, m2, m3]);
-    }
-    // --- facettes ---
-    const k = T.couverture;
-    const zv = pts.map((p) => H(p));
-    for (const [a, c, e] of finales as [number, number, number][]) {
-      const A = pts[a]!, C = pts[c]!, E = pts[e]!;
-      const g = { x: (A.x + C.x + E.x) / 3, y: (A.y + C.y + E.y) / 3 };
-      const ar = proche(g);
-      const uvp = (p: XY) => [(p.x - ar.A.x) * ar.ux + (p.y - ar.A.y) * ar.uy, distSeg(p, ar)];
-      const s = (p: XY, z: number) => { const q = P.versS(p); return [q.x, P.y(z), q.z]; };
-      // brisis un peu plus sombre que le terrasson (zinc vu presque de face)
-      const dG = dist(g);
-      const col = T.forme === 'mansarde' && dG < run ? [0.88, 0.9, 0.93] : [1, 1, 1];
-      // orientation : normale vers le haut
-      const pa = s(A, zv[a]!), pc = s(C, zv[c]!), pe = s(E, zv[e]!);
-      const e1 = [pc[0]! - pa[0]!, pc[2]! - pa[2]!], e2 = [pe[0]! - pa[0]!, pe[2]! - pa[2]!];
-      const ny = e1[1]! * e2[0]! - e1[0]! * e2[1]!; // composante y de (pc-pa)×(pe-pa)
-      if (ny >= 0) tri(k, pa, pc, pe, uvp(A), uvp(C), uvp(E), col);
-      else tri(k, pa, pe, pc, uvp(A), uvp(E), uvp(C), col);
-    }
-    // --- débord d'égout (couvre le raccord avec la corniche) + acrotère des terrasses ---
-    for (const a of egouts) {
-      const S = (p: XY, z: number) => { const q = P.versS(p); return [q.x, P.y(z), q.z]; };
-      const o = (p: XY, k2: number) => ({ x: p.x + a.nx * k2, y: p.y + a.ny * k2 });
-      const vers = [P.versS(o(a.A, 1)).x - P.versS(a.A).x, 0, P.versS(o(a.A, 1)).z - P.versS(a.A).z];
-      const zA0 = H(a.A), zB0 = H(a.B);
-      if (T.forme === 'terrasse') {
-        const zA = Math.max(zA0, zB0) + 0.55;
-        quad('acrotere', [S(o(a.A, 0.02), T.zGmin - 0.2), S(o(a.B, 0.02), T.zGmin - 0.2), S(o(a.B, 0.02), zA), S(o(a.A, 0.02), zA)], vers, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-        quad('acrotere', [S(o(a.A, 0.02), zA), S(o(a.B, 0.02), zA), S(o(a.B, -0.28), zA), S(o(a.A, -0.28), zA)], [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
-        quad('acrotere', [S(o(a.A, -0.28), zA), S(o(a.B, -0.28), zA), S(o(a.B, -0.28), Math.min(zA0, zB0)), S(o(a.A, -0.28), Math.min(zA0, zB0))], vers.map((v) => -v), [[0, 0], [1, 0], [1, 1], [0, 1]]);
-      } else {
-        const uvq = [[0, -0.35], [a.L, -0.35], [a.L, 0], [0, 0]];
-        quad(k, [S(o(a.A, 0.35), zA0 - 0.1), S(o(a.B, 0.35), zB0 - 0.1), S(a.B, zA0 === zB0 ? zB0 : zB0), S(a.A, zA0)], [0, 1, 0], uvq);
-        // mur sans façade générée : rive pleine du haut des murs IGN jusqu'à l'égout (aucun jour sous le toit)
-        if (!a.tache && Math.max(zA0, zB0) - T.zGmin > 0.1)
-          quad('pignon', [S(a.A, T.zGmin - 0.2), S(a.B, T.zGmin - 0.2), S(a.B, zB0), S(a.A, zA0)], vers, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+      // cellule de bord : emprise ∩ cellule (contour extérieur), moins les cours
+      const ext = clip(b.contour, c);
+      if (ext.length < 3) continue;
+      // garder les sommets de bord de cellule (voisines fines) qui sont dans l'emprise : on les insère sur les côtés
+      const pieces = [ext];
+      const tr = trous.map((t) => clip(t, c)).filter((t) => t.length >= 3);
+      for (const pc of pieces) {
+        let fcs: number[][] = [];
+        try { fcs = THREE.ShapeUtils.triangulateShape(V(pc), tr.map(V)); } catch { fcs = []; }
+        const all = [...pc, ...tr.flat()];
+        for (const f of fcs) emettreTri(all[f[0]!]!, all[f[1]!]!, all[f[2]!]!);
       }
     }
-    // --- pignons sur les murs mitoyens : du toit jusque sous l'égout (cache tout écart avec le voisin) ---
-    for (const a of aretes) {
-      if (a.egout) continue;
-      const S = (p: XY, z: number) => { const q = P.versS(p); return [q.x, P.y(z), q.z]; };
-      const n = Math.max(1, Math.ceil(a.L / 1.0));
-      const vers = (() => { const q0 = P.versS(a.A), q1 = P.versS({ x: a.A.x + a.nx, y: a.A.y + a.ny }); return [q1.x - q0.x, 0, q1.z - q0.z]; })();
+
+    // --- fond de toit sombre : aucun jour visible, même sur une fissure numérique ---
+    {
+      let fond: number[][] = [];
+      try { fond = THREE.ShapeUtils.triangulateShape(V(b.contour), trous.map(V)); } catch { /* emprise dégénérée */ }
+      const ptsF = [...b.contour, ...trous.flat()];
+      for (const f of fond) {
+        const [a, c, e] = f.map((i) => S(ptsF[i]!, zGmin - 0.08)) as [number[], number[], number[]];
+        tri('fond', a, c, e, [0, 0], [0, 0], [0, 0], [1, 1, 1]);
+      }
+    }
+
+    // --- murs propres sur le contour exact (sauf là où une façade générée existe) ---
+    const kMur = !P.murs ? 'mur'
+      : typo === 'brique' ? 'murBrique' : typo === 'moderne' || typo === 'tour' || typo === 'bureaux' ? 'murBeton'
+      : typo === 'faubourien' || typo === 'contemporain' || typo === 'annexe' ? 'murEnduit' : 'murPierre';
+    let hh = 0;
+    for (const ch of b.id) hh = (hh * 31 + ch.charCodeAt(0)) >>> 0;
+    const tint = 0.94 + ((hh % 100) / 100) * 0.08;
+    const colMur = kMur === 'murBrique' ? [1, 0.97, 0.95] : [Math.pow(0.86 * tint, 2.2), Math.pow(0.81 * tint, 2.2), Math.pow(0.72 * tint, 2.2)];
+    for (const m of ms) {
+      if (m.tache) continue;
+      const vers = versScene(m.nx, m.ny);
+      const n = Math.max(1, Math.ceil(m.L / 1.5));
       for (let i = 0; i < n; i++) {
-        const p0 = { x: a.A.x + a.ux * (a.L * i) / n, y: a.A.y + a.uy * (a.L * i) / n }, p1 = { x: a.A.x + a.ux * (a.L * (i + 1)) / n, y: a.A.y + a.uy * (a.L * (i + 1)) / n };
-        const h0 = H(p0), h1 = H(p1);
-        if (h0 - T.zGmin < 0.3 && h1 - T.zGmin < 0.3) continue;
-        quad('pignon', [S(p0, T.zGmin - 1.5), S(p1, T.zGmin - 1.5), S(p1, h1), S(p0, h0)], vers, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+        const s0 = (m.L * i) / n, s1 = (m.L * (i + 1)) / n;
+        const p0 = { x: m.A.x + m.ux * s0, y: m.A.y + m.uy * s0 }, p1 = { x: m.A.x + m.ux * s1, y: m.A.y + m.uy * s1 };
+        const h0 = H(p0), h1 = H(p1), b0 = P.sol(p0) - 1, b1 = P.sol(p1) - 1;
+        quad(kMur, [S(p0, b0), S(p1, b1), S(p1, h1), S(p0, h0)], vers, [[s0, b0 - solB], [s1, b1 - solB], [s1, h1 - solB], [s0, h0 - solB]], colMur);
       }
     }
-    // --- lucarnes : une par travée des façades haussmanniennes, dans le brisis ---
-    if (T.forme === 'mansarde' && T.hBrisis >= 2 && !loin && P.spec) {
+
+    // --- débord d'égout / acrotère ---
+    for (const l of li) {
+      const vers = versScene(l.nx, l.ny);
+      const o = (p: XY, kk: number) => ({ x: p.x + l.nx * kk, y: p.y + l.ny * kk });
+      const zA = H(l.A), zB = H(l.B);
+      if (terrasse) {
+        const zc = Math.max(zA, zB) + 0.55;
+        quad('acrotere', [S(o(l.A, 0.02), zGmin - 0.2), S(o(l.B, 0.02), zGmin - 0.2), S(o(l.B, 0.02), zc), S(o(l.A, 0.02), zc)], vers, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+        quad('acrotere', [S(o(l.A, 0.02), zc), S(o(l.B, 0.02), zc), S(o(l.B, -0.28), zc), S(o(l.A, -0.28), zc)], [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+        quad('acrotere', [S(o(l.A, -0.28), zc), S(o(l.B, -0.28), zc), S(o(l.B, -0.28), zG + 0.15), S(o(l.A, -0.28), zG + 0.15)], vers.map((v) => -v), [[0, 0], [1, 0], [1, 1], [0, 1]]);
+      } else quad(k, [S(o(l.A, 0.3), zA - 0.1), S(o(l.B, 0.3), zB - 0.1), S(l.B, zB), S(l.A, zA)], [0, 1, 0], [[0, -0.3], [l.L, -0.3], [l.L, 0], [0, 0]]);
+    }
+
+    // --- lucarnes alignées sur les travées des façades (mansardes) ---
+    if (M.forme === 'mansarde' && M.hB >= 2 && !loin && P.spec) {
       for (const tch of ts) {
         const sp = P.spec(tch);
         const dernier = sp.niveaux.length - 1;
@@ -440,30 +611,34 @@ export function construireToits(P: ParamsToitsProc) {
         const W = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / W, dzz = (bz - az) / W, nx = -dzz, nz = dx;
         const yG = tch.y + tch.hGout;
         for (const { u, l } of axes) {
-          const w = Math.min(1.5, l + 0.35), hF = Math.min(1.75, T.hBrisis - 0.2), prof = 1.9;
+          if (u < 0.9 || u > W - 0.9) continue;
+          const w = Math.min(1.5, l + 0.35), hF = Math.min(1.75, M.hB - 0.2), prof = 1.9;
           const P0 = (uu: number, d: number, v: number) => [ax + dx * uu + nx * d, yG + v, az + dzz * uu + nz * d];
-          const dF = -0.35; // front en retrait derrière la corniche, dans le brisis
-          const u0 = u - w / 2, u1 = u + w / 2;
-          const face = [nx, 0, nz], gauche = [-dx, 0, -dzz], droite = [dx, 0, dzz];
-          // jouées
-          quad('lucarne', [P0(u0, dF, 0.1), P0(u0, dF - prof, 0.1), P0(u0, dF - prof, hF), P0(u0, dF, hF)], gauche, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          quad('lucarne', [P0(u1, dF, 0.1), P0(u1, dF - prof, 0.1), P0(u1, dF - prof, hF), P0(u1, dF, hF)], droite, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          // fronton (encadrement) et fenêtre
-          const fw = 0.16;
-          quad('lucarne', [P0(u0, dF, 0.1), P0(u0 + fw, dF, 0.1), P0(u0 + fw, dF, hF), P0(u0, dF, hF)], face, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          quad('lucarne', [P0(u1 - fw, dF, 0.1), P0(u1, dF, 0.1), P0(u1, dF, hF), P0(u1 - fw, dF, hF)], face, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          quad('lucarne', [P0(u0, dF, 0.1), P0(u1, dF, 0.1), P0(u1, dF, 0.35), P0(u0, dF, 0.35)], face, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          quad('lucarne', [P0(u0, dF, hF - 0.2), P0(u1, dF, hF - 0.2), P0(u1, dF, hF), P0(u0, dF, hF)], face, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          quad('vitre', [P0(u0 + fw, dF - 0.08, 0.35), P0(u1 - fw, dF - 0.08, 0.35), P0(u1 - fw, dF - 0.08, hF - 0.2), P0(u0 + fw, dF - 0.08, hF - 0.2)], face, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-          // petit toit à deux pans (zinc)
+          const dF = -0.3, u0 = u - w / 2, u1 = u + w / 2, fw = 0.16;
+          const face = [nx, 0, nz], un = [[0, 0], [1, 0], [1, 1], [0, 1]];
+          quad('lucarne', [P0(u0, dF, 0.1), P0(u0, dF - prof, 0.1), P0(u0, dF - prof, hF), P0(u0, dF, hF)], [-dx, 0, -dzz], un);
+          quad('lucarne', [P0(u1, dF, 0.1), P0(u1, dF - prof, 0.1), P0(u1, dF - prof, hF), P0(u1, dF, hF)], [dx, 0, dzz], un);
+          quad('lucarne', [P0(u0, dF, 0.1), P0(u0 + fw, dF, 0.1), P0(u0 + fw, dF, hF), P0(u0, dF, hF)], face, un);
+          quad('lucarne', [P0(u1 - fw, dF, 0.1), P0(u1, dF, 0.1), P0(u1, dF, hF), P0(u1 - fw, dF, hF)], face, un);
+          quad('lucarne', [P0(u0, dF, 0.1), P0(u1, dF, 0.1), P0(u1, dF, 0.35), P0(u0, dF, 0.35)], face, un);
+          quad('lucarne', [P0(u0, dF, hF - 0.2), P0(u1, dF, hF - 0.2), P0(u1, dF, hF), P0(u0, dF, hF)], face, un);
+          quad('vitre', [P0(u0 + fw, dF - 0.08, 0.35), P0(u1 - fw, dF - 0.08, 0.35), P0(u1 - fw, dF - 0.08, hF - 0.2), P0(u0 + fw, dF - 0.08, hF - 0.2)], face, un);
           const hc = hF + Math.min(0.55, w * 0.35);
           quad('zinc', [P0(u0 - 0.08, dF + 0.12, hF), P0(u, dF + 0.12, hc), P0(u, dF - prof, hc), P0(u0 - 0.08, dF - prof, hF)], [0, 1, 0], [[0, 0], [0, 0.8], [2, 0.8], [2, 0]]);
           quad('zinc', [P0(u1 + 0.08, dF + 0.12, hF), P0(u, dF + 0.12, hc), P0(u, dF - prof, hc), P0(u1 + 0.08, dF - prof, hF)], [0, 1, 0], [[0, 0], [0, 0.8], [2, 0.8], [2, 0]]);
-          // tympan triangulaire
           quad('lucarne', [P0(u0, dF, hF), P0(u1, dF, hF), P0(u, dF, hc), P0(u, dF, hc)], face, [[0, 0], [1, 0], [0.5, 1], [0.5, 1]]);
           stats.lucarnes++;
         }
       }
+    }
+  };
+
+  for (const b of P.batiments) {
+    try {
+      construireUn(b);
+    } catch (e) {
+      stats.echecs++;
+      console.warn('toit', b.id, e);
     }
   }
 
@@ -475,22 +650,18 @@ export function construireToits(P: ParamsToitsProc) {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(B.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(B.c, 3));
     g.computeBoundingSphere();
-    const m = new THREE.Mesh(g, mats[k as keyof typeof mats]);
-    m.castShadow = k !== 'vitre';
+    const m = new THREE.Mesh(g, mats[k]);
+    m.castShadow = k !== 'vitre' && k !== 'fond';
     m.receiveShadow = true;
     m.name = 'toit_' + k;
     groupe.add(m);
     stats.triangles += B.p.length / 9;
   }
+  stats.rmsMedian = Math.round(med(rmsTous) * 100) / 100;
+  stats.ms = Math.round(performance.now() - t0);
 
-  /** Altitude du toit en un point (pour poser les cheminées), null hors bâtiment. */
   const surToit = (p: XY): number | null => {
-    for (const b of P.batiments) {
-      const T = toits.get(b.id);
-      if (!T) continue;
-      if (!dansBat(b, p)) continue;
-      return hauteurs.get(b.id)?.(p) ?? null;
-    }
+    for (const b of P.batiments) if (toits.has(b.id) && dansBat(b, p)) return hauteurs.get(b.id)?.(p) ?? null;
     return null;
   };
   return { groupe, toits, stats, surToit };

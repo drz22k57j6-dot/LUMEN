@@ -25,7 +25,8 @@ export interface TacheFacade {
   socle?: number;
   /** Hauteur de gouttière/corniche mesurée au LiDAR, depuis le pied (m). */
   hGout: number;
-  lod: 0 | 1;
+  /** 0 : tous les détails ; 1 : menuiseries à plat ; 2 : (loin) mur percé + vitres + balcons, sans menuiseries ni ferronnerie. */
+  lod: 0 | 1 | 2;
   /** Données du bâtiment (BD TOPO + LiDAR) pour la classification. */
   bat?: Omit<EntreeFacade, 'id' | 'largeur' | 'hGout' | 'socle'>;
 }
@@ -67,6 +68,7 @@ export class MoteurFacades {
   /** Stats de la dernière fabrication (panneau ⚙). */
   stats = { facades: 0, triangles: 0, drawCalls: 0, ms: 0, typologies: {} as Record<string, number> };
   specs: FacadeSpec[] = [];
+  private plat = false;
 
   constructor(aniso = 8) {
     const mur = (t: TexMur, rough = 0.88) => {
@@ -180,7 +182,9 @@ export class MoteurFacades {
       g.setIndex(s.idx);
       g.computeBoundingSphere();
       const m = new THREE.Mesh(g, this.mats[k]);
-      m.castShadow = k !== 'vitre' && k !== 'rideau' && k !== 'rideau2';
+      // ombres : seulement les volumes porteurs (murs, balcons/corniches) — les menuiseries et ferronneries
+      // (< 1 texel de la carte d'ombre) coûteraient le double de triangles pour rien
+      m.castShadow = k === 'pierre' || k === 'refends' || k === 'brique' || k === 'enduit' || k === 'beton' || k === 'decor';
       m.receiveShadow = true;
       m.name = 'facades_' + k;
       this.groupe.add(m);
@@ -229,6 +233,7 @@ export class MoteurFacades {
   private pave(k: Cle, R: Repere, u0: number, u1: number, v0: number, v1: number, d0: number, d1: number, col: [number, number, number], uo = 0) {
     if (u1 - u0 < EPS || v1 - v0 < EPS || d1 - d0 < EPS) return;
     this.face(k, R, u0, u1, v0, v1, d1, col, uo);
+    if (this.plat) return; // LOD 1–2 : face avant seule (le relief de quelques cm est invisible de loin)
     const q = (P: [number, number, number][], n: [number, number, number], uv: [number, number][]) => this.quad(k, R, P, n, uv, col);
     q([[u0, v1, d0], [u1, v1, d0], [u1, v1, d1], [u0, v1, d1]], [0, 1, 0], [[u0 + uo, d0], [u1 + uo, d0], [u1 + uo, d1], [u0 + uo, d1]]);
     q([[u0, v0, d0], [u1, v0, d0], [u1, v0, d1], [u0, v0, d1]], [0, -1, 0], [[u0 + uo, d0], [u1 + uo, d0], [u1 + uo, d1], [u0 + uo, d1]]);
@@ -249,7 +254,7 @@ export class MoteurFacades {
     this.specs.push(s);
     this.stats.facades++;
     this.stats.typologies[s.classement.typologie] = (this.stats.typologies[s.classement.typologie] ?? 0) + 1;
-    const lod0 = t.lod === 0;
+    const lod0 = t.lod === 0, lod2 = t.lod === 2;
     // décalage UV le long de la rue (continuité des joints entre façades voisines)
     const uo = (ax * 0.37 + az * 0.61) % 2;
     const mur: Cle = s.materiau === 'pierre' ? 'pierre' : s.materiau === 'brique' ? 'brique' : s.materiau === 'beton' ? 'beton' : s.materiau === 'verre' ? 'beton' : 'enduit';
@@ -284,7 +289,11 @@ export class MoteurFacades {
     this.quad(mur, R, [[0, bas, dos], [0, s.hauteur, dos], [0, s.hauteur, 0], [0, bas, 0]], [-1, 0, 0], [[dos, bas], [dos, s.hauteur], [0, s.hauteur], [0, bas]], teinte);
     this.quad(mur, R, [[W, bas, dos], [W, s.hauteur, dos], [W, s.hauteur, 0], [W, bas, 0]], [1, 0, 0], [[dos, bas], [dos, s.hauteur], [0, s.hauteur], [0, bas]], teinte);
     // 2. Ouvertures : tableaux, menuiseries, vitres
-    for (const o of ouv) this.ouverture(R, s, o, mur, teinte, decor, lod0, uo);
+    for (const o of ouv) {
+      this.plat = !lod0;
+      this.ouverture(R, s, o, mur, teinte, decor, lod0, uo, lod2);
+      this.plat = false;
+    }
 
     // 3. Balcons filants : dalle, consoles, garde-corps
     for (const b of s.balcons) {
@@ -295,9 +304,11 @@ export class MoteurFacades {
         this.pave('decor', R, c - 0.11, c + 0.11, b.v - 0.45, b.v - 0.27, b.saillie * 0.45, b.saillie * 0.75, decor, uo);
       }
       const dF = b.saillie - 0.05;
-      this.ferronnerie(R, b.u0 + 0.02, b.u1 - 0.02, b.v, b.v + 1.0, dF, dF);
-      this.ferronnerie(R, b.u0 + 0.02, b.u0 + 0.02, b.v, b.v + 1.0, 0.02, dF);
-      this.ferronnerie(R, b.u1 - 0.02, b.u1 - 0.02, b.v, b.v + 1.0, 0.02, dF);
+      if (!lod2) this.ferronnerie(R, b.u0 + 0.02, b.u1 - 0.02, b.v, b.v + 1.0, dF, dF);
+      if (!lod2) {
+        this.ferronnerie(R, b.u0 + 0.02, b.u0 + 0.02, b.v, b.v + 1.0, 0.02, dF);
+        this.ferronnerie(R, b.u1 - 0.02, b.u1 - 0.02, b.v, b.v + 1.0, 0.02, dF);
+      }
       this.pave('metal', R, b.u0, b.u1, b.v + 0.98, b.v + 1.03, dF - 0.03, dF + 0.03, [0.16, 0.17, 0.18]);
     }
 
@@ -314,7 +325,7 @@ export class MoteurFacades {
     for (const en of s.enseignes) if (en.h > 0.15) this.pave('enseigne', R, en.u - 0.05, en.u + en.l + 0.05, en.v, en.v + en.h, 0, 0.12, s.teinteAccent);
   }
 
-  private ouverture(R: Repere, s: FacadeSpec, o: Ouverture, mur: Cle, teinte: [number, number, number], decor: [number, number, number], lod0: boolean, uo: number) {
+  private ouverture(R: Repere, s: FacadeSpec, o: Ouverture, mur: Cle, teinte: [number, number, number], decor: [number, number, number], lod0: boolean, uo: number, lod2 = false) {
     const { u, v, l, h, prof } = o;
     const k: Cle = s.refends && o.niveau === 0 ? 'refends' : mur;
     // tableaux (embrasures) : intérieur du trou, faces tournées vers l'axe de l'ouverture
@@ -329,7 +340,12 @@ export class MoteurFacades {
     const dV = -prof + 0.04; // plan des vitres
     const f = 0.065; // largeur du dormant
 
-    if (o.type === 'porte-cochere' || o.type === 'porte') {
+    if (lod2) {
+      const k2: Cle = o.type === 'porte-cochere' || o.type === 'porte' ? 'bois' : o.type === 'mur-rideau' || o.type === 'vitrine' ? 'vitre' : pidF < 0.3 ? 'rideau' : pidF < 0.4 ? 'rideau2' : 'vitre';
+      this.face(k2, R, u, u + l, v, v + h, dV, k2 === 'bois' ? acc : [1, 1, 1], 0, pidF);
+      if (o.gardeCorps) this.pave('metal', R, u, u + l, v + 0.98, v + 1.03, -0.06, 0.0, [0.16, 0.17, 0.18]);
+      return;
+    } else if (o.type === 'porte-cochere' || o.type === 'porte') {
       const hV = o.type === 'porte-cochere' ? Math.min(0.9, h * 0.22) : h * 0.35;
       // imposte vitrée en haut, vantaux de bois dessous
       this.face('vitre', R, u, u + l, v + h - hV, v + h, dV, [1, 1, 1], 0, pidF);
